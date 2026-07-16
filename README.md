@@ -1,0 +1,874 @@
+# Obsidian Learning Agent
+
+本仓库正在由企业文档 RAG 知识库演进为 Obsidian Learning Agent。
+当前原有文档上传和 RAG 功能继续保留。
+
+## 1. 项目介绍
+
+这是一个基于 FastAPI 的企业文档 RAG 知识库问答系统 MVP，支持上传 PDF、DOCX、TXT、CSV 文档，解析后切分为 chunk，使用本地 BAAI/bge-m3 生成 embedding，写入 Qdrant 向量库，并通过 DeepSeek API 基于检索结果生成带引用来源的答案。
+
+需要由另一个项目复用本服务时，请先阅读 [`docs/RAG_PROJECT_HANDOFF.md`](docs/RAG_PROJECT_HANDOFF.md)。该文档包含当前完成度、接口契约、数据结构、RAG 流程、HTTP 客户端示例、部署边界和已知限制。
+
+第一阶段目标链路：上传文档 -> 解析 chunk -> 写入 Qdrant -> 提问 -> 检索 -> DeepSeek 生成答案 -> 返回引用来源。
+
+## 2. 技术栈
+
+- FastAPI：后端 API
+- SQLAlchemy：ORM
+- MySQL：文档元数据、问答历史、反馈数据
+- Qdrant：向量数据库
+- Docling：PDF、DOCX 文档解析
+- sentence-transformers：加载 BAAI/bge-m3 本地 embedding 模型
+- OpenAI SDK：以兼容方式调用 DeepSeek API
+- Docker Compose：启动 API 与 Qdrant
+- pytest：基础接口测试
+
+## 3. 系统架构
+
+```text
+Client
+  -> FastAPI Routers
+  -> Services
+     -> ParserService: Docling / plain text parsing
+     -> ChunkService: text splitting
+     -> EmbeddingService: BAAI/bge-m3 vectors
+     -> VectorService: Qdrant upsert/search
+     -> RagService: query rewrite placeholder, retrieval, rerank placeholder, answer generation
+     -> DeepSeekClient: OpenAI-compatible LLM call
+  -> MySQL: documents / qa_history / feedback
+  -> Qdrant: chunk vectors and payload
+```
+
+## 4. RAG 流程说明
+
+1. 用户通过 `/documents/upload` 上传文件。
+2. 系统校验后缀并保存到 `uploads/`。
+3. PDF、DOCX 使用 Docling 解析，TXT、CSV 使用纯文本读取。
+4. 文档内容按固定窗口切分为 chunk。
+5. 使用 `BAAI/bge-m3` 为每个 chunk 生成 embedding。
+6. chunk 向量和 payload 写入 Qdrant。
+7. 用户通过 `/rag/ask` 提问。
+8. 系统为问题生成 embedding，并按可选 `document_id` 过滤检索。
+9. 第一阶段 rerank 保留接口，直接返回候选结果。
+10. DeepSeek 基于检索上下文生成答案。
+11. API 返回 answer 和 sources，并写入 `qa_history`。
+
+## 5. 环境变量说明
+
+复制 `.env.example` 为 `.env`，然后填写真实配置。`.env` 已被 `.gitignore` 忽略，不要提交真实密钥。
+
+| 变量 | 说明 | 默认值 |
+| --- | --- | --- |
+| `APP_HOST` | API 监听地址 | `0.0.0.0` |
+| `APP_PORT` | API 监听端口 | `8000` |
+| `UPLOAD_DIR` | 上传目录 | `uploads` |
+| `MAX_UPLOAD_SIZE_MB` | 单文件大小限制 | `50` |
+| `MYSQL_HOST` | MySQL 地址 | `127.0.0.1` |
+| `MYSQL_PORT` | MySQL 端口 | `3306` |
+| `MYSQL_USER` | MySQL 用户 | `root` |
+| `MYSQL_PASSWORD` | MySQL 密码 | 无 |
+| `MYSQL_DATABASE` | MySQL 数据库 | `rag_knowledge_base` |
+| `QDRANT_URL` | Qdrant 地址 | `http://localhost:6333` |
+| `QDRANT_API_KEY` | Qdrant Cloud API Key | 空 |
+| `QDRANT_COLLECTION` | Qdrant collection 名称 | `rag_chunks` |
+| `EMBEDDING_MODEL_NAME` | Embedding 模型 | `BAAI/bge-m3` |
+| `EMBEDDING_DEVICE` | 推理设备 | `cpu` |
+| `DEEPSEEK_API_KEY` | DeepSeek API Key | 必填 |
+| `DEEPSEEK_BASE_URL` | DeepSeek OpenAI 兼容地址 | `https://api.deepseek.com` |
+| `DEEPSEEK_MODEL` | DeepSeek 模型 | `deepseek-v4-flash` |
+
+## 6. 本地启动步骤
+
+先确保本地 MySQL 已启动，并创建数据库：
+
+```sql
+CREATE DATABASE IF NOT EXISTS rag_knowledge_base CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
+启动 Qdrant：
+
+```bash
+docker compose up -d qdrant
+```
+
+创建虚拟环境并安装依赖：
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+启动 API：
+
+```bash
+uvicorn app.main:app --reload
+```
+
+访问健康检查：
+
+```bash
+curl http://localhost:8000/health
+```
+
+## 7. Docker Compose 启动步骤
+
+当前 compose 使用本地 MySQL，API 容器通过 `host.docker.internal:3306` 访问你电脑上的 MySQL，Qdrant 由 Docker 启动。
+
+```bash
+docker compose up -d --build
+```
+
+如果你希望 MySQL 也放入 Docker，可以在 `docker-compose.yml` 中追加 mysql service，并把 `MYSQL_HOST` 改为 `mysql`。
+
+## 8. API 示例
+
+上传文档：
+
+```bash
+curl -X POST http://localhost:8000/documents/upload \
+  -F "file=@./example.pdf"
+```
+
+返回：
+
+```json
+{
+  "document_id": "...",
+  "filename": "example.pdf",
+  "chunk_count": 12
+}
+```
+
+提问：
+
+```bash
+curl -X POST http://localhost:8000/rag/ask \
+  -H "Content-Type: application/json" \
+  -d "{\"question\":\"这份文档讲了什么？\",\"top_k\":5}"
+```
+
+返回：
+
+```json
+{
+  "answer": "基于知识库生成的答案 [来源1]",
+  "sources": [
+    {
+      "document_id": "...",
+      "filename": "example.pdf",
+      "page_no": 1,
+      "chunk_index": 0,
+      "score": 0.82,
+      "text": "原始 chunk 片段"
+    }
+  ]
+}
+```
+
+## 9. 后续可扩展方向
+
+- query rewrite：用 LLM 改写复杂问题，提高召回率
+- hybrid search：结合 BM25 和向量检索
+- rerank：接入 `BAAI/bge-reranker-v2-m3`
+- Redis 缓存：缓存 embedding、热点问答、会话状态
+- Agent tool 对接：把知识库检索作为工具接入 Agent
+- RAGAS 评估：构建自动化 RAG 质量评估集
+## 本地调试后台页面
+
+访问地址：
+
+```text
+http://127.0.0.1:8000/admin
+```
+
+页面用途：
+
+该页面用于本地开发、上传文档、查看处理状态、测试 RAG 问答、执行 RAG retrieve 检索调试、查看文档 chunks 和查看 sources。它是轻量级调试页面，不是生产级管理后台。
+
+注意事项：
+
+- 该页面不包含权限系统，不应直接暴露到公网。
+- 页面不会展示 API Key、数据库密码或完整本地绝对路径。
+- 可以通过 `.env` 中的 `ADMIN_ENABLED=true` 开启页面；设置为 `false` 时访问 `/admin` 会返回 404。
+
+如何测试：
+
+1. 启动后端：
+
+```powershell
+cd "<项目根目录>"
+uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+2. 打开：
+
+```text
+http://127.0.0.1:8000/admin
+```
+
+3. 在页面中依次测试：
+
+- 检查 `/health` 状态。
+- 上传一个 PDF、DOCX、TXT 或 CSV 测试文档。
+- 刷新文档列表。
+- 点击“View Detail”查看文档处理状态。
+- 点击“Chunks”或文档详情中的“查看 chunks”，检查文档解析和 chunk 切分质量。
+- 在“RAG 检索调试”区域输入问题，调用 `/rag/retrieve` 查看 `rewritten_query`、命中的 chunks、`score` 和 `rerank_score`。
+- 输入问题，调用 `/rag/ask` 测试问答。
+- 查看 answer 和 sources。
+
+## MySQL 启动说明
+
+如果启动 FastAPI 时看到类似下面的错误：
+
+```text
+Can't connect to MySQL server on '127.0.0.1'
+```
+
+说明当前 `MYSQL_HOST` 和 `MYSQL_PORT` 指向的位置没有 MySQL 服务在监听。当前项目支持两种本地方式：
+
+1. 使用本机 MySQL
+
+确认 MySQL 已启动，并创建数据库：
+
+```sql
+CREATE DATABASE IF NOT EXISTS rag_knowledge_base CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
+`.env` 中保持：
+
+```text
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3306
+MYSQL_USER=root
+MYSQL_PASSWORD=your_mysql_password
+MYSQL_DATABASE=rag_knowledge_base
+```
+
+2. 使用 Docker Compose MySQL
+
+确保 Docker 服务已启动后运行：
+
+```powershell
+cd "<项目根目录>"
+docker compose up -d mysql qdrant
+```
+
+再启动 API：
+
+```powershell
+uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+说明：
+
+- `DATABASE_REQUIRED_ON_STARTUP=false` 时，即使数据库暂时不可用，`/health` 和 `/admin` 也可以启动，方便排查环境问题。
+- 文档上传、文档列表、文档详情和 RAG 问答仍然需要 MySQL 正常可用。
+- 如果希望数据库不可用时 FastAPI 直接启动失败，可以在 `.env` 中设置 `DATABASE_REQUIRED_ON_STARTUP=true`。
+
+## 文档生命周期接口
+
+### 删除文档
+
+```http
+DELETE /documents/{document_id}
+```
+
+作用：
+
+- 根据 `document_id` 查询 MySQL `documents` 表。
+- 如果文档不存在，返回 404。
+- 删除 Qdrant 中 `payload.document_id` 等于该 `document_id` 的所有 points。
+- 保留上传目录中的原始上传文件。
+- 将 MySQL 文档状态更新为 `deleted`，并写入 `deleted_at`。
+
+返回示例：
+
+```json
+{
+  "document_id": "...",
+  "status": "deleted",
+  "message": "document soft deleted successfully"
+}
+```
+
+### 重建索引
+
+```http
+POST /documents/{document_id}/reindex
+```
+
+作用：
+
+- 根据 `document_id` 查询已有文档。
+- 如果文档不存在，返回 404。
+- 如果文档状态是 `deleted`，返回 400。
+- 先删除 Qdrant 中该文档的旧 chunks。
+- 复用现有文档处理逻辑，重新读取原始文件、解析、切分、生成 embedding，并写入 Qdrant。
+- 不生成新的 `document_id`，而是在原 `document_id` 上重建索引。
+
+返回示例：
+
+```json
+{
+  "document_id": "...",
+  "status": "processing",
+  "message": "document reindex started"
+}
+```
+
+### 文档状态
+
+- `processing`：文档正在处理或重建索引。
+- `completed`：文档处理完成，chunks 已写入 Qdrant。
+- `failed`：文档处理失败，`error_message` 会记录失败原因。
+- `deleted`：文档已软删除，Qdrant 中对应向量已按 `document_id` 清理，上传目录中的原始上传文件默认保留。
+- `purged`：文档已彻底清理，源文件已尝试删除，数据库记录保留为 `purged` 状态。
+
+### documents 表新增字段
+
+当前模型新增了：
+
+- `updated_at`
+- `processed_at`
+- `deleted_at`
+- `purged_at`
+- `file_hash`
+- `error_message`
+
+应用启动时会尽量自动补齐这些字段。如果需要手动同步 MySQL 表结构，可以执行：
+
+```sql
+ALTER TABLE documents ADD COLUMN updated_at DATETIME NULL;
+ALTER TABLE documents ADD COLUMN processed_at DATETIME NULL;
+ALTER TABLE documents ADD COLUMN error_message TEXT NULL;
+```
+
+如果字段已存在，不要重复执行对应语句。
+
+## 本地调试后台页面补充
+
+`/admin` 现在除了上传文档、查看文档列表、查看详情、测试 RAG 问答和查看 sources，还支持：
+
+- 在文档列表中删除文档。
+- 在文档列表中重建索引。
+- 在文档列表中查看文档 chunks。
+- 在文档详情区删除当前文档。
+- 在文档详情区重建当前文档索引。
+- 在文档详情区查看当前文档 chunks。
+- 在 RAG 检索调试区调用 `/rag/retrieve`，只执行检索，不调用 DeepSeek answer generation。
+- 显示 `status`、`processed_at`、`updated_at` 和 `error_message`。
+
+删除操作会先弹出二次确认；重建索引会立即返回 `processing`，页面不会阻塞等待处理完成，可以通过“刷新详情”查看状态变化。
+
+检索调试区会展示原始 question、`rewritten_query`、`retrieved_count` 和检索到的 chunks。文档 chunks 查看用于检查文档解析和切分质量。`score` 是 Qdrant 原始相似度分数，`rerank_score` 是 reranker 分数，二者不能直接比较。
+
+该页面仍然仅用于本地开发和演示，不包含权限系统，不应暴露到公网。
+
+## Rerank 检索增强
+
+Rerank 用于在 Qdrant 初始召回后，对候选 chunks 进行二次排序，从而提升最终交给 LLM 的上下文质量。
+
+当前流程：
+
+```text
+question
+-> query rewrite
+-> query embedding
+-> Qdrant 初始召回 retrieve_top_k
+-> rerank top_k
+-> prompt context
+-> DeepSeek answer
+```
+
+推荐默认配置：
+
+```env
+RERANK_ENABLED=false
+RERANK_MODEL=BAAI/bge-reranker-v2-m3
+RERANK_TOP_N=5
+```
+
+说明：
+- `RERANK_ENABLED=false` 时不启用真实 rerank，系统使用 Qdrant 原始排序，并取前 `top_k` 个 chunks。
+- `RERANK_ENABLED=true` 时会尝试加载 `RERANK_MODEL` 指定的 reranker。
+- 优先尝试 `FlagEmbedding` 的 `FlagReranker`，失败后尝试 `sentence-transformers` 的 `CrossEncoder`。
+- 如果依赖缺失、模型不存在或加载失败，系统会记录 warning，并自动 fallback 到 Qdrant 原始排序，不影响 `/rag/ask` 基本运行。
+- Qdrant 初始召回数量为 `max(top_k * 5, 20)`，最终交给 DeepSeek 的 chunks 数量仍受请求中的 `top_k` 控制。
+- `/rag/ask` 返回的 `sources` 会保留原始 `score`；如果真实 rerank 成功，还会兼容式增加 `rerank_score`。
+- `/admin` 的系统状态区会展示 `RERANK_ENABLED`、`RERANK_MODEL` 和 `RERANK_TOP_N` 这类非敏感配置，不展示 API Key、数据库密码或完整本地绝对路径。
+
+## RAG 检索评估脚本
+
+`scripts/evaluate_retrieval.py` 用于批量评估 RAG 的 retrieval 效果。它只评估检索结果，不调用 DeepSeek 生成答案，也不评估最终回答质量。
+
+`/admin` 适合手动上传文档、查看文档状态、测试单次 RAG 问答和查看 sources；`scripts/evaluate_retrieval.py` 适合批量检索评估。二者用途不同，评估脚本不在 `/admin` 页面中执行长时间任务。
+
+评估集文件：
+
+```text
+tests/eval_questions.json
+```
+
+示例格式：
+
+```json
+[
+  {
+    "question": "文档中主要讲了什么？",
+    "expected_document_id": "替换为真实 document_id",
+    "expected_keywords": ["关键词1", "关键词2"]
+  }
+]
+```
+
+填写方法：
+- 先通过 `/admin` 上传文档。
+- 在文档列表或文档详情中复制真实 `document_id`。
+- 把 `expected_document_id` 从 `替换为真实 document_id` 改成真实值。
+- `expected_keywords` 填入你期望在检索 chunk 文本里命中的关键词。
+
+运行命令：
+
+```powershell
+python scripts/evaluate_retrieval.py --top-k 5
+```
+
+脚本会在控制台输出每个问题的结果，并写入：
+
+```text
+reports/retrieval_eval_result.json
+```
+
+指标含义：
+- `Hit Rate@K`：前 K 个检索结果里是否包含期望文档，多个问题时取平均。
+- `MRR`：期望文档出现得越靠前分数越高；第 1 位为 `1`，第 2 位为 `0.5`，没有命中为 `0`。
+- `keyword_match_rate`：期望关键词在返回 chunk 文本中的命中比例。
+
+注意：
+- 如果 `tests/eval_questions.json` 不存在或为空，脚本会给出提示。
+- 如果 `expected_document_id` 仍是占位符，脚本会跳过该问题并提示替换为真实 `document_id`，不会让整个评估崩溃。
+- 为避免调用 DeepSeek，评估脚本不会使用 LLM 生成答案，也不会使用 LLM query rewrite；它复用项目中的 embedding、Qdrant 检索和 rerank 逻辑。
+
+## 工程稳定性与排查说明
+
+### 文档生命周期接口
+
+文档状态含义：
+- `processing`：文档已创建记录，正在后台解析、切分、向量化和写入 Qdrant。
+- `completed`：文档处理完成，chunk 已写入 Qdrant。
+- `failed`：文档处理失败，`error_message` 会记录失败原因。
+- `deleted`：文档已软删除，Qdrant 中对应向量已按 `document_id` 清理，上传目录中的源文件默认保留。
+- `purged`：文档已彻底清理，源文件已尝试删除，数据库记录保留为 `purged` 状态。
+
+接口：
+- `GET /documents`：查看文档列表，默认不显示 `deleted` 和 `purged` 文档。
+- `GET /documents/{document_id}`：查看文档详情和处理状态。
+- `DELETE /documents/{document_id}`：删除文档、清理向量并标记为 `deleted`。
+- `DELETE /documents/{document_id}/purge`：清理向量、删除源文件并标记为 `purged`。
+- `POST /documents/{document_id}/reindex`：在原 `document_id` 上重建索引，不生成新的文档 ID。
+
+### Rerank 配置说明
+
+配置项：
+
+```env
+RERANK_ENABLED=false
+RERANK_MODEL=BAAI/bge-reranker-v2-m3
+RERANK_TOP_N=5
+```
+
+说明：
+- `RERANK_ENABLED=false` 时使用 Qdrant 原始排序。
+- `RERANK_ENABLED=true` 时会尝试加载 `RERANK_MODEL`。
+- 优先尝试 `FlagEmbedding`，失败后尝试 `sentence-transformers` 的 `CrossEncoder`。
+- 依赖缺失、模型缺失或加载失败时会记录 warning，并自动 fallback 到 Qdrant 原始排序。
+
+### RAG 检索评估脚本
+
+评估集：
+
+```text
+tests/eval_questions.json
+```
+
+运行：
+
+```powershell
+python scripts/evaluate_retrieval.py --top-k 5
+```
+
+指标：
+- `Hit Rate@K`：前 K 个检索结果中是否包含期望文档。
+- `MRR`：期望文档出现得越靠前分数越高，第 1 位为 `1`，第 2 位为 `0.5`。
+- `keyword_match_rate`：期望关键词在检索 chunk 文本中的命中比例。
+
+该脚本只评估 retrieval，不调用 DeepSeek 生成答案，也不评估最终答案质量。
+
+### 本地调试后台页面
+
+访问地址：
+
+```text
+http://127.0.0.1:8000/admin
+```
+
+用途：
+- `/admin` 用于本地开发、上传文档、查看处理状态、测试单次 RAG 问答、执行 RAG retrieve 检索调试、查看文档 chunks 和查看 sources。
+- `scripts/evaluate_retrieval.py` 用于批量检索评估。
+- 二者用途不同，后台页面不会直接执行长时间评估任务。
+- retrieve 调试只调用 `/rag/retrieve`，用于查看 `rewritten_query`、检索 chunks、Qdrant `score` 和 `rerank_score`，不调用 DeepSeek answer generation。
+- 文档 chunks 查看调用 `GET /documents/{document_id}/chunks`，用于检查文档解析和切分质量。
+- `score` 是 Qdrant 原始相似度分数，`rerank_score` 是 reranker 分数，二者不能直接比较。
+
+配置：
+
+```env
+ADMIN_ENABLED=true
+```
+
+`ADMIN_ENABLED=true` 时允许访问 `/admin`；设置为 `false` 时访问 `/admin` 返回 404。该页面不包含生产级权限系统，不应直接暴露到公网。
+
+安全说明：
+- 页面不会展示 `DEEPSEEK_API_KEY`。
+- 页面不会展示数据库密码。
+- 页面不会展示完整 `DATABASE_URL`。
+- 页面不会展示完整本地绝对路径。
+
+常见问题：
+- 页面打开空白：确认后端已启动，并访问 `http://127.0.0.1:8000/admin`。
+- `admin.js` 加载失败：确认 `main.py` 已挂载 `/static`，并检查浏览器 Network 中 `/static/admin.js` 是否返回 200。
+- 调接口返回 404：确认接口路径和 HTTP 方法是否正确，例如上传使用 `POST /documents/upload`。
+- 上传后一直 `processing`：查看文档详情中的 `error_message`，并检查后端日志、MySQL、Qdrant 和模型加载状态。
+
+### 常见问题排查
+
+MySQL 连接失败：
+- 确认 MySQL 已启动。
+- 检查 `.env` 中 `MYSQL_HOST`、`MYSQL_PORT`、`MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_DATABASE`。
+- 如果使用 `DATABASE_URL`，确认用户名、密码、主机、端口和数据库名正确。
+
+Qdrant 连接失败：
+- 确认 Qdrant 已启动。
+- 本地常用命令：`docker compose up -d qdrant`。
+- 当前项目优先使用 gRPC，需确认 `6334` 端口可访问。
+
+DeepSeek API Key 未配置：
+- `.env` 中需要设置 `DEEPSEEK_API_KEY`。
+- 后端不会在日志或页面中输出 API Key。
+- DeepSeek 调用失败时 API 返回友好错误，真实错误原因只写入日志。
+
+Embedding 模型首次下载较慢：
+- `BAAI/bge-m3` 首次加载需要下载或读取本地模型文件。
+- 后续请求会复用内存中的模型，通常明显更快。
+- 可将模型放在项目内 `models/` 目录，并通过 `EMBEDDING_MODEL` 或 `EMBEDDING_MODEL_NAME` 指向相对路径。
+
+文档解析失败：
+- 文档状态会变为 `failed`。
+- `documents.error_message` 会记录失败原因。
+- 后台日志会记录 `document_id`、`filename`、parser 类型和简短错误信息。
+
+上传后一直 `processing`：
+- 检查后端日志是否正在下载模型或连接 Qdrant。
+- 查看文档详情中的 `error_message`。
+- 确认 Qdrant 和 MySQL 正常可用。
+
+Windows 路径问题：
+- `.env` 中 `UPLOAD_DIR` 建议使用相对路径 `uploads`。
+- 不要在代码中写死本机路径。
+- 文件路径由项目根目录动态计算。
+
+### 项目移动路径后如何运行
+
+本项目不依赖硬编码绝对路径。上传目录通过 `UPLOAD_DIR` 配置，模板、静态文件和上传目录都基于项目根目录动态计算。
+
+移动项目后：
+1. 进入新的项目根目录。
+2. 检查 `.env` 中数据库、Qdrant、模型相对路径是否仍然有效。
+3. 确认 `UPLOAD_DIR=uploads` 或其他相对路径存在。
+4. 重新启动后端。
+
+## RAG 调试接口
+
+本项目提供两个轻量调试接口，用于区分“检索问题”和“生成问题”。这两个接口不会生成最终答案，也不会写入问答历史。
+
+### POST /rag/retrieve
+
+作用：只执行检索流程，返回 query rewrite 后的检索词、Qdrant 原始召回分数和 rerank 分数，不调用 DeepSeek answer generation。
+
+请求示例：
+
+```json
+{
+  "question": "这个项目支持哪些文件格式？",
+  "document_id": "可选 document_id",
+  "top_k": 5
+}
+```
+
+返回示例：
+
+```json
+{
+  "question": "这个项目支持哪些文件格式？",
+  "rewritten_query": "这个项目支持哪些文件格式？",
+  "document_id": null,
+  "top_k": 5,
+  "retrieved_count": 1,
+  "chunks": [
+    {
+      "chunk_id": "document-id_0",
+      "document_id": "document-id",
+      "filename": "demo.txt",
+      "file_type": "txt",
+      "page_no": 1,
+      "section_title": null,
+      "chunk_index": 0,
+      "score": 0.4922,
+      "rerank_score": 0.0742,
+      "text": "chunk 原文内容"
+    }
+  ]
+}
+```
+
+说明：
+- `question` 不能为空。
+- `document_id` 可选；传入后只检索该文档。
+- 初始召回数量为 `max(top_k * 5, 20)`，最终返回 `top_k` 个 chunk。
+- 如果没有检索结果，返回 `chunks=[]`。
+- query rewrite 如果失败，会回退到原始问题。
+- 该接口不调用 DeepSeek 生成答案，不写入 `qa_history`。
+
+### GET /documents/{document_id}/chunks
+
+作用：查看某个文档已经写入 Qdrant 的 chunk 内容，用于检查文档解析和切分质量。
+
+返回示例：
+
+```json
+{
+  "document_id": "document-id",
+  "filename": "demo.txt",
+  "status": "completed",
+  "chunk_count": 2,
+  "chunks": [
+    {
+      "chunk_id": "document-id_0",
+      "chunk_index": 0,
+      "page_no": 1,
+      "section_title": "项目背景",
+      "text": "chunk 原文内容"
+    }
+  ]
+}
+```
+
+说明：
+- 文档不存在返回 404。
+- 文档状态为 `deleted` 时返回 400。
+- 接口从 Qdrant 按 `payload.document_id` 查询，并尽量按 `chunk_index` 升序返回。
+- 返回内容不会包含完整本地 `file_path`。
+
+### /rag/retrieve 与 /rag/ask 的区别
+
+- `/rag/retrieve`：检索调试接口，只返回 chunks，不生成答案，不写入 `qa_history`。
+- `/rag/ask`：完整 RAG 问答接口，会检索 chunks，然后调用 DeepSeek 生成 `answer`，并返回 `answer + sources`。
+
+### score 与 rerank_score
+
+- `score` 是 Qdrant 原始向量检索相似度分数。
+- `rerank_score` 是 reranker 对 query 和 chunk 相关性的二次排序分数。
+- 两个分数来自不同模型或算法，不能直接横向比较，只适合分别观察排序变化。
+
+## 历史问答记录
+
+`POST /rag/ask` 完整问答接口会在生成答案后写入 `qa_history`，用于本地调试、项目演示和排查回答来源。
+
+当前保存内容包括：
+- `question`：用户原始问题。
+- `rewritten_query`：用于检索的改写问题。
+- `answer`：DeepSeek 生成的答案；无检索结果时保存“根据当前知识库资料，无法确定”。
+- `source_chunks`：本次回答引用的 sources，包含 `chunk_id`、`document_id`、`filename`、`page_no`、`chunk_index`、`score`、`rerank_score` 和 `text` 等非敏感字段。
+- `created_at`：问答创建时间。
+
+### GET /qa/history
+
+分页查看历史问答列表。
+
+请求示例：
+
+```text
+GET /qa/history?page=1&page_size=20&keyword=上传&document_id=可选文档ID
+```
+
+参数说明：
+- `page`：页码，最小为 1。
+- `page_size`：每页数量，默认 20，最大 100。
+- `keyword`：可选，按 question 或 answer 模糊搜索。
+- `document_id`：可选，按历史 sources 中的 `document_id` 过滤。
+
+返回示例：
+
+```json
+{
+  "total": 1,
+  "page": 1,
+  "page_size": 20,
+  "items": [
+    {
+      "id": "qa-id",
+      "question": "这个项目支持哪些文件格式？",
+      "rewritten_query": "项目支持文件格式",
+      "answer_preview": "系统支持 PDF、DOCX、TXT、CSV 文件...",
+      "created_at": "2026-06-13T12:00:00",
+      "source_count": 2
+    }
+  ]
+}
+```
+
+列表接口不会返回完整 `source_chunks` 原文，避免历史较多时页面卡顿。
+
+### GET /qa/history/{qa_id}
+
+查看单条历史问答详情。
+
+返回示例：
+
+```json
+{
+  "id": "qa-id",
+  "question": "这个项目支持哪些文件格式？",
+  "rewritten_query": "项目支持文件格式",
+  "answer": "系统支持 PDF、DOCX、TXT、CSV 文件 [来源1]。",
+  "source_chunks": [
+    {
+      "chunk_id": "document-id_0",
+      "document_id": "document-id",
+      "filename": "demo.txt",
+      "page_no": 1,
+      "chunk_index": 0,
+      "score": 0.4922,
+      "rerank_score": 0.0742,
+      "text": "chunk 原文内容"
+    }
+  ],
+  "created_at": "2026-06-13T12:00:00"
+}
+```
+
+`qa_id` 不存在时返回 404。历史问答中的 sources 可用于排查回答引用了哪些文档片段。接口不会返回 API Key、数据库密码或完整本地绝对路径。
+
+### /admin 历史问答
+
+`/admin` 页面支持查看历史问答列表和详情：
+- 点击“刷新历史”加载 `GET /qa/history`。
+- 可用 keyword 搜索 question/answer。
+- 可用 document_id 过滤与某个文档相关的历史问答。
+- 点击“详情”查看 question、rewritten_query、answer 和 source_chunks。
+- source 中的 `score` 是 Qdrant 原始相似度分数，`rerank_score` 是 reranker 分数，二者不能直接比较。
+
+## Alembic 数据库迁移
+
+项目已引入 Alembic 管理数据库结构。Alembic 连接信息从现有配置读取，优先使用 `.env` 中的 `DATABASE_URL`，否则使用 `MYSQL_HOST`、`MYSQL_PORT`、`MYSQL_USER`、`MYSQL_PASSWORD` 和 `MYSQL_DATABASE` 组合生成连接，不在迁移配置中写死本地路径或密码。
+
+首次在新数据库执行迁移：
+
+```powershell
+alembic upgrade head
+```
+
+生成新的迁移文件：
+
+```powershell
+alembic revision --autogenerate -m "describe change"
+```
+
+已有本地数据库已经手动建过表时，不要直接对生产或重要数据执行破坏性操作。常见处理方式：
+
+- 开发环境可以先备份数据，再重建数据库后执行 `alembic upgrade head`。
+- 如果当前数据库结构已经和最新 model 一致，可以使用：
+
+```powershell
+alembic stamp head
+```
+
+`stamp head` 只标记当前数据库已经处于最新迁移版本，不会实际创建或修改表。使用前要确认现有表结构已经包含 README 和 migration 中列出的字段。
+
+## file_hash 去重
+
+上传文档时系统会在保存临时上传文件后计算 SHA256，并写入 `documents.file_hash`。如果发现相同 `file_hash` 的文档已经存在，且状态不是 `deleted` 或 `purged`，上传接口会返回已有文档，不会重复解析、embedding 或写入 Qdrant。
+
+重复上传返回示例：
+
+```json
+{
+  "document_id": "existing-document-id",
+  "filename": "demo.txt",
+  "status": "duplicate",
+  "chunk_count": 5,
+  "file_hash": "sha256...",
+  "message": "same file already exists"
+}
+```
+
+当前策略：
+
+- `completed`、`processing`、`failed` 等非删除状态的相同文件会被视为重复。
+- `deleted` 或 `purged` 的旧记录不阻止重新上传同一文件。
+- 日志只记录文件名、document_id 和 hash 判断结果，不记录完整文件内容。
+
+## soft delete 与 purge
+
+### DELETE /documents/{document_id}
+
+该接口现在是软删除：
+
+```text
+DELETE /documents/{document_id}
+-> 删除 Qdrant 中 payload.document_id 对应的 chunks
+-> MySQL documents.status = deleted
+-> 写入 deleted_at
+-> 保留 uploads/ 下源文件
+-> 保留 documents 数据库记录
+```
+
+软删除后：
+
+- `GET /documents` 默认不返回 `deleted` 和 `purged` 文档。
+- `GET /documents?status=deleted` 可以查看软删除文档。
+- `GET /documents/{document_id}` 仍可查看 deleted 状态详情。
+- `POST /documents/{document_id}/reindex` 对 deleted 文档返回 400。
+
+### DELETE /documents/{document_id}/purge
+
+该接口用于彻底清理：
+
+```text
+DELETE /documents/{document_id}/purge
+-> 删除 Qdrant 中 payload.document_id 对应的 chunks
+-> 删除 uploads/ 下源文件，如果文件不存在则记录 warning 但不崩溃
+-> MySQL documents.status = purged
+-> 写入 purged_at
+-> 保留 documents 数据库记录，避免误删审计信息
+```
+
+返回示例：
+
+```json
+{
+  "document_id": "document-id",
+  "status": "purged",
+  "message": "document purged successfully"
+}
+```
+
+`/admin` 中原“删除”按钮现在表示软删除，会提示“从向量库移除文档 chunks，但保留源文件和数据库记录”。`Purge` 是危险操作，会二次确认，并尝试物理删除源文件。
+
+## documents 新增字段
+
+- `file_hash`：上传文件 SHA256，用于重复上传判断。
+- `deleted_at`：软删除时间。
+- `purged_at`：彻底清理时间。

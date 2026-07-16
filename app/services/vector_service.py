@@ -1,0 +1,171 @@
+import time
+import logging
+from collections.abc import Callable
+from typing import TypeVar
+from uuid import NAMESPACE_URL, uuid5
+
+from qdrant_client import QdrantClient
+from qdrant_client.http.models import Distance, FieldCondition, Filter, MatchValue, PointStruct, VectorParams
+
+from app.core.config import get_settings
+from app.services.chunk_service import Chunk
+
+T = TypeVar("T")
+logger = logging.getLogger(__name__)
+
+
+class VectorService:
+    def __init__(self, vector_size: int | None = None, ensure_collection: bool = True) -> None:
+        settings = get_settings()
+        self.collection_name = settings.qdrant_collection
+        self.client = QdrantClient(
+            url=settings.qdrant_url,
+            api_key=settings.qdrant_api_key or None,
+            timeout=30,
+            prefer_grpc=settings.qdrant_prefer_grpc,
+            grpc_port=settings.qdrant_grpc_port,
+        )
+        self.vector_size = vector_size
+        if ensure_collection:
+            if vector_size is None:
+                raise ValueError("vector_size is required when ensuring a Qdrant collection")
+            self.ensure_collection()
+
+    def _with_retry(self, operation: Callable[[], T], attempts: int = 3) -> T:
+        last_exc: Exception | None = None
+        for index in range(attempts):
+            try:
+                return operation()
+            except Exception as exc:
+                last_exc = exc
+                logger.warning(
+                    "Qdrant operation failed: attempt=%s/%s, error_type=%s, message=%s",
+                    index + 1,
+                    attempts,
+                    type(exc).__name__,
+                    str(exc)[:300],
+                )
+                if index == attempts - 1:
+                    break
+                time.sleep(1.5 * (index + 1))
+        raise last_exc or RuntimeError("Qdrant operation failed")
+
+    def ensure_collection(self) -> None:
+        collections = self._with_retry(lambda: self.client.get_collections()).collections
+        exists = any(collection.name == self.collection_name for collection in collections)
+        if not exists:
+            self._with_retry(
+                lambda: self.client.create_collection(
+                    collection_name=self.collection_name,
+                    vectors_config=VectorParams(size=self.vector_size, distance=Distance.COSINE),
+                )
+            )
+
+    def delete_by_document_id(self, document_id: str) -> None:
+        query_filter = Filter(
+            must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))]
+        )
+        self._with_retry(
+            lambda: self.client.delete(
+                collection_name=self.collection_name,
+                points_selector=query_filter,
+                wait=True,
+            )
+        )
+
+    def list_chunks_by_document_id(self, document_id: str) -> list[dict]:
+        query_filter = Filter(
+            must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))]
+        )
+        chunks: list[dict] = []
+        offset = None
+        while True:
+            points, offset = self._with_retry(
+                lambda: self.client.scroll(
+                    collection_name=self.collection_name,
+                    scroll_filter=query_filter,
+                    limit=100,
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=False,
+                )
+            )
+            chunks.extend(point.payload or {} for point in points)
+            if offset is None:
+                break
+
+        chunks.sort(key=lambda payload: int(payload.get("chunk_index", 0)))
+        logger.info("Qdrant chunks listed: document_id=%s, returned_count=%s", document_id, len(chunks))
+        return chunks
+
+    def upsert_chunks(
+        self,
+        *,
+        document_id: str,
+        filename: str,
+        file_type: str,
+        chunks: list[Chunk],
+        embeddings: list[list[float]],
+    ) -> None:
+        points: list[PointStruct] = []
+        for chunk, embedding in zip(chunks, embeddings, strict=True):
+            chunk_id = f"{document_id}_{chunk.chunk_index}"
+            points.append(
+                PointStruct(
+                    id=str(uuid5(NAMESPACE_URL, chunk_id)),
+                    vector=embedding,
+                    payload={
+                        "chunk_id": chunk_id,
+                        "document_id": document_id,
+                        "filename": filename,
+                        "file_type": file_type,
+                        "page_no": chunk.page_no,
+                        "section_title": chunk.section_title,
+                        "chunk_index": chunk.chunk_index,
+                        "text": chunk.text,
+                    },
+                )
+            )
+        if points:
+            logger.info("Qdrant upsert requested: document_id=%s, point_count=%s", document_id, len(points))
+            self._with_retry(lambda: self.client.upsert(collection_name=self.collection_name, points=points))
+
+    def search(self, query_vector: list[float], top_k: int, document_id: str | None = None) -> list[dict]:
+        query_filter = None
+        if document_id:
+            query_filter = Filter(
+                must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))]
+            )
+
+        if hasattr(self.client, "query_points"):
+            result = self._with_retry(
+                lambda: self.client.query_points(
+                    collection_name=self.collection_name,
+                    query=query_vector,
+                    limit=top_k,
+                    query_filter=query_filter,
+                    with_payload=True,
+                )
+            )
+            hits = result.points
+        else:
+            # 需要根据当前官方文档核验：旧版 qdrant-client 使用 search，新版使用 query_points。
+            hits = self._with_retry(
+                lambda: self.client.search(
+                    collection_name=self.collection_name,
+                    query_vector=query_vector,
+                    limit=top_k,
+                    query_filter=query_filter,
+                    with_payload=True,
+                )
+            )
+
+        results = [
+            {
+                "score": float(hit.score),
+                "payload": hit.payload or {},
+            }
+            for hit in hits
+        ]
+        logger.info("Qdrant search completed: requested_top_k=%s, returned_count=%s", top_k, len(results))
+        return results

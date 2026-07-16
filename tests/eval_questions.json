@@ -1,0 +1,7 @@
+[
+  {
+    "question": "文档中主要讲了什么？",
+    "expected_document_id": "fefee853-8de4-4018-b80b-2a53d5ce59bb",
+    "expected_keywords": ["RAG 知识库", "数据库"]
+  }
+]

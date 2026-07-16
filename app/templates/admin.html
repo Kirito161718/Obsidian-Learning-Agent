@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RAG 知识库本地调试后台</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='admin.css') }}">
+</head>
+<body>
+  <main class="page-shell">
+    <header class="page-header">
+      <div>
+        <h1>RAG 知识库本地调试后台</h1>
+        <p>仅用于本地开发、接口测试和项目演示，不是生产级管理后台。</p>
+      </div>
+      <span id="healthBadge" class="status-badge muted">检查中...</span>
+    </header>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>系统状态</h2>
+        <button id="checkHealthBtn" type="button">检查健康状态</button>
+      </div>
+      <div class="status-grid">
+        <div>
+          <span class="field-label">后端服务</span>
+          <strong id="healthText">正在检查 /health...</strong>
+        </div>
+        <div>
+          <span class="field-label">Rerank 状态</span>
+          <strong id="rerankEnabledText">正在加载...</strong>
+        </div>
+        <div>
+          <span class="field-label">Rerank 模型</span>
+          <span id="rerankModelText">-</span>
+        </div>
+        <div>
+          <span class="field-label">Rerank Top N</span>
+          <span id="rerankTopNText">-</span>
+        </div>
+        <div>
+          <span class="field-label">检索排序</span>
+          <span id="rerankHintText">-</span>
+        </div>
+        <div>
+          <span class="field-label">页面用途</span>
+          <span>本地上传文档、查看处理状态、删除文档、重建索引、测试 RAG 问答和检查 sources。</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>文档上传</h2>
+      <form id="uploadForm" class="form-row">
+        <input id="fileInput" name="file" type="file" accept=".pdf,.docx,.txt,.csv" required>
+        <button id="uploadBtn" type="submit">上传</button>
+      </form>
+      <div id="uploadResult" class="result-box empty">还没有上传记录。</div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>文档列表</h2>
+        <button id="refreshDocumentsBtn" type="button">刷新文档列表</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>文档 ID</th>
+              <th>文件名</th>
+              <th>类型</th>
+              <th>分块数</th>
+              <th>状态</th>
+              <th>创建时间</th>
+              <th>处理时间</th>
+              <th>错误</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="documentsTableBody">
+            <tr><td colspan="9" class="empty-cell">尚未加载文档列表。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>文档详情</h2>
+        <div class="button-row">
+          <button id="refreshDetailBtn" type="button" disabled>刷新详情</button>
+          <button id="viewChunksDetailBtn" class="secondary" type="button" disabled>查看 chunks</button>
+          <button id="reindexDetailBtn" class="secondary" type="button" disabled>重建索引</button>
+          <button id="deleteDetailBtn" class="danger" type="button" disabled>删除文档</button>
+          <button id="purgeDetailBtn" class="danger" type="button" disabled>Purge</button>
+        </div>
+      </div>
+      <div id="documentDetail" class="result-box empty">请选择一条文档记录查看详情。</div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>文档 Chunks 查看</h2>
+        <button id="clearDocumentChunksBtn" type="button">清空 chunks</button>
+      </div>
+      <div id="documentChunksBox" class="chunk-debug-box empty">请选择文档后点击“查看 chunks”。</div>
+    </section>
+
+    <section class="panel">
+      <h2>RAG 检索调试</h2>
+      <form id="retrieveForm" class="ask-form">
+        <label>
+          <span class="field-label">问题</span>
+          <textarea id="retrieveQuestionInput" rows="4" required placeholder="输入问题，只执行检索，不生成答案"></textarea>
+        </label>
+        <div class="form-grid">
+          <label>
+            <span class="field-label">文档 ID（可选）</span>
+            <input id="retrieveDocumentIdInput" type="text" placeholder="留空表示在全部文档中检索">
+          </label>
+          <label>
+            <span class="field-label">返回数量 Top K</span>
+            <input id="retrieveTopKInput" type="number" min="1" max="20" value="5">
+          </label>
+        </div>
+        <button id="retrieveBtn" type="submit">执行检索</button>
+      </form>
+      <div id="retrieveResultBox" class="retrieve-result-box empty">还没有检索结果。</div>
+    </section>
+
+    <section class="panel">
+      <h2>RAG 问答测试</h2>
+      <form id="askForm" class="ask-form">
+        <label>
+          <span class="field-label">问题</span>
+          <textarea id="questionInput" rows="4" required placeholder="请输入一个与已上传文档相关的问题"></textarea>
+        </label>
+        <div class="form-grid">
+          <label>
+            <span class="field-label">文档 ID（可选）</span>
+            <input id="askDocumentIdInput" type="text" placeholder="留空表示在全部文档中检索">
+          </label>
+          <label>
+            <span class="field-label">召回数量 Top K</span>
+            <input id="topKInput" type="number" min="1" max="20" value="5">
+          </label>
+        </div>
+        <button id="askBtn" type="submit">提问</button>
+      </form>
+      <div id="answerBox" class="answer-box empty">还没有答案。</div>
+    </section>
+
+    <section class="panel">
+      <h2>引用来源 Sources</h2>
+      <div id="sourcesList" class="sources-list empty">没有返回引用来源。</div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>历史问答</h2>
+        <button id="refreshHistoryBtn" type="button">刷新历史</button>
+      </div>
+      <form id="historyFilterForm" class="history-filter-form">
+        <div class="form-grid">
+          <label>
+            <span class="field-label">关键词</span>
+            <input id="historyKeywordInput" type="text" placeholder="按 question 或 answer 搜索">
+          </label>
+          <label>
+            <span class="field-label">文档 ID（可选）</span>
+            <input id="historyDocumentIdInput" type="text" placeholder="按 sources 中的 document_id 过滤">
+          </label>
+          <label>
+            <span class="field-label">页码</span>
+            <input id="historyPageInput" type="number" min="1" value="1">
+          </label>
+          <label>
+            <span class="field-label">每页数量</span>
+            <input id="historyPageSizeInput" type="number" min="1" max="100" value="20">
+          </label>
+        </div>
+      </form>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>问答 ID</th>
+              <th>问题</th>
+              <th>答案摘要</th>
+              <th>Sources</th>
+              <th>创建时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="historyTableBody">
+            <tr><td colspan="6" class="empty-cell">尚未加载历史问答。</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="historyPager" class="pager-box empty">暂无分页信息。</div>
+      <div id="historyDetailBox" class="history-detail-box empty">请选择一条历史问答查看详情。</div>
+    </section>
+
+    <section class="panel error-panel">
+      <div class="panel-header">
+        <h2>错误信息</h2>
+        <button id="clearErrorsBtn" type="button">清空</button>
+      </div>
+      <div id="errorBox" class="error-box empty">暂无错误。</div>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', path='admin.js') }}"></script>
+</body>
+</html>
