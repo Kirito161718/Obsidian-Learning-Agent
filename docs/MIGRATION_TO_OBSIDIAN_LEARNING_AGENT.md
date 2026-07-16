@@ -48,7 +48,7 @@ Docker 实际只存在旧 Qdrant volume `rag-knowledge-base_qdrant_storage`；�
 - 评估报告：`reports/`
 - 项目模型：`models/`
 - 后续模型缓存：`model_cache/`
-- MySQL 与 Qdrant：Docker named volumes，不位于项目目录
+- MySQL：本机 `MySQL80` Windows 服务；Qdrant：Docker named volume。两者数据均不位于项目目录
 
 这些运行时目录均已加入 `.gitignore`；保留的 `.gitkeep` 只用于维护目录结构。
 
@@ -66,16 +66,21 @@ Docker 实际只存在旧 Qdrant volume `rag-knowledge-base_qdrant_storage`；�
 - 模型：源/目标均为 21 个文件、4,588,806,442 字节，相对路径完全一致；主权重、配置、tokenizer 与 Sentence Transformers 关键文件 SHA256 全部一致。
 - 模型实载：本地离线 embedding 成功生成 1024 维向量；本地 rerank 使用 CrossEncoder 成功为两条候选评分；没有重新下载模型。
 - Qdrant：既有 `rag-qdrant` 容器和 `rag-knowledge-base_qdrant_storage` volume 可用；健康检查通过；现有 1 个 collection，配置的 collection 存在。容器历史标签仍记录 `C:\Users\example\Desktop\阶段三\rag-knowledge-base\docker-compose.yml`，但当前没有指向该目录的 bind mount；新项目 Compose 配置本身不引用该路径。
-- Alembic：`heads` 为 `20260613_0001 (head)`，history 正常；`current` 使用项目 `.env` 时收到 MySQL 1045 拒绝，因此没有执行 `upgrade head`。
-- pytest：`58 passed in 1.04s`，0 失败，0 跳过。
+- Alembic 1045 根因：FastAPI 将 `Settings.database_url` 的 SQLAlchemy `URL` 对象直接传给 `create_engine`，保留了真实密码；旧 Alembic 代码先调用 `str(settings.database_url)`，SQLAlchemy 会把密码遮蔽为字面量 `***`，随后 Alembic 使用错误密码连接，因此返回 1045。该问题不是 `.env` 路径、内容或环境变量覆盖造成的。
+- 配置来源：FastAPI 与 Alembic 现在都通过 `app/core/config.py` 的 `get_settings()` 加载 `BASE_DIR / ".env"`，并直接复用同一个 `database_url` URL 对象。Pydantic 保持标准优先级：进程环境变量高于项目 `.env`，以便 Docker Compose 覆盖 `MYSQL_HOST`；验证时未发现进程级、用户级或机器级 `DATABASE_URL`/`MYSQL_*` 覆盖。
+- 脱敏连接：driver=`mysql+pymysql`、username=`root`、host=`127.0.0.1`、port=`3306`、database=`rag_knowledge_base`、password=`***`。SQLAlchemy 直接连接、FastAPI engine 和 Alembic URL 三者均成功执行 `SELECT 1` 并指向同一数据库。
+- Migration 状态：初次成功连接时 revision 为空，`alembic_version` 表不存在。只读结构比对确认三张业务表、全部字段、主键和外键与 `20260613_0001` 一致，但缺少 migration 定义的非唯一索引 `ix_documents_file_hash`；数据库有 21 条 documents 记录。补建该索引后 Alembic metadata diff 为 0，再执行 `stamp 20260613_0001`。没有执行 `upgrade` 或 `downgrade`。
+- Alembic 最终结果：`heads` 和 `current` 均为 `20260613_0001 (head)`，history 正常。
+- pytest：`60 passed in 1.15s`，0 失败，0 跳过。
 - FastAPI：新目录 uvicorn 可启动；`/health`、`/docs`、`/admin`、`/documents`、`/qa/history` 均返回 200。
 - 数据读取：文档列表返回 3 条，问答历史验证前为 11 条。
 - RAG：`/rag/retrieve` 返回 200、3 个 chunk；移除与固定 qdrant-client 版本不兼容的 `check_compatibility` 可选参数后通过。
 - 完整问答：在允许外网的桌面用户环境中 `/rag/ask` 返回 200，含答案与 3 个来源，问答历史从 11 增至 12。
+- 数据库配置修复后回归：新目录 uvicorn 的 `/health`、`/documents`、`/qa/history` 均返回 200，分别返回 3 个活动文档和 12 条问答历史；未再次调用真实 DeepSeek。
 - Git：新项目已初始化独立仓库并创建 `chore: migrate RAG baseline to Obsidian Learning Agent` 基线提交；`.env`、`.venv`、模型、缓存、运行时目录、上传、迁移备份和数据库数据均未跟踪。
 
 ## 当前删除判定
 
-`SAFE_TO_DELETE_OLD_PROJECT=false`
+`SAFE_TO_DELETE_OLD_PROJECT=true`
 
-阻塞项：项目 `.env` 中的 MySQL 凭据与当前本机 MySQL80 认证状态不一致，导致 `alembic current` 返回 1045。虽然桌面用户环境中的 FastAPI 数据库读写和完整问答已通过，但必须统一项目 `.env` 与实际凭据并成功重跑 `alembic current`，才能安全删除旧目录。
+删除条件已经满足：数据库配置已统一，三种连接验证通过，Alembic 已处于 head，pytest 和基础 API 回归通过，Qdrant 没有旧目录 bind mount，模型及遗留 uploads 已迁移或隔离备份，且旧绝对路径仅存在于迁移历史文档。Codex 不自动删除旧目录；最终删除仍由用户手动执行。
