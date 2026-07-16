@@ -7,7 +7,7 @@
 
 这是一个基于 FastAPI 的企业文档 RAG 知识库问答系统 MVP，支持上传 PDF、DOCX、TXT、CSV 文档，解析后切分为 chunk，使用本地 BAAI/bge-m3 生成 embedding，写入 Qdrant 向量库，并通过 DeepSeek API 基于检索结果生成带引用来源的答案。
 
-需要由另一个项目复用本服务时，请先阅读 [`docs/RAG_PROJECT_HANDOFF.md`](docs/RAG_PROJECT_HANDOFF.md)。该文档包含当前完成度、接口契约、数据结构、RAG 流程、HTTP 客户端示例、部署边界和已知限制。
+后续演进以 [`docs/OBSIDIAN_LEARNING_AGENT_REUSE.md`](docs/OBSIDIAN_LEARNING_AGENT_REUSE.md) 为准；旧 RAG 项目的接口与迁移背景仍可参阅 [`docs/RAG_PROJECT_HANDOFF.md`](docs/RAG_PROJECT_HANDOFF.md)。
 
 第一阶段目标链路：上传文档 -> 解析 chunk -> 写入 Qdrant -> 提问 -> 检索 -> DeepSeek 生成答案 -> 返回引用来源。
 
@@ -20,6 +20,7 @@
 - Docling：PDF、DOCX 文档解析
 - sentence-transformers：加载 BAAI/bge-m3 本地 embedding 模型
 - OpenAI SDK：以兼容方式调用 DeepSeek API
+- LangGraph：编排 RAG 状态、节点与条件路由
 - Docker Compose：启动 API 与 Qdrant
 - pytest：基础接口测试
 
@@ -28,12 +29,16 @@
 ```text
 Client
   -> FastAPI Routers
+  -> RagService compatibility facade
+  -> LangGraph RAG workflow
+     -> conditional query rewrite and dual retrieval
+     -> context building and citation validation
   -> Services
      -> ParserService: Docling / plain text parsing
      -> ChunkService: text splitting
      -> EmbeddingService: BAAI/bge-m3 vectors
      -> VectorService: Qdrant upsert/search
-     -> RagService: query rewrite placeholder, retrieval, rerank placeholder, answer generation
+     -> RerankService: optional BGE reranking with fallback
      -> DeepSeekClient: OpenAI-compatible LLM call
   -> MySQL: documents / qa_history / feedback
   -> Qdrant: chunk vectors and payload
@@ -47,11 +52,12 @@ Client
 4. 文档内容按固定窗口切分为 chunk。
 5. 使用 `BAAI/bge-m3` 为每个 chunk 生成 embedding。
 6. chunk 向量和 payload 写入 Qdrant。
-7. 用户通过 `/rag/ask` 提问。
-8. 系统为问题生成 embedding，并按可选 `document_id` 过滤检索。
-9. 第一阶段 rerank 保留接口，直接返回候选结果。
-10. DeepSeek 基于检索上下文生成答案。
-11. API 返回 answer 和 sources，并写入 `qa_history`。
+7. 用户通过 `/rag/ask` 或 `/rag/retrieve` 提交问题，LangGraph 先使用原始问题检索。
+8. 工作流以结果数量、最高相似度、指代词和问题长度评估召回质量；仅在需要时调用 DeepSeek 改写查询。
+9. 发生改写时合并原始查询与改写查询的双路召回，按 `chunk_id` 去重后统一进入可配置的 BGE Rerank。
+10. Context Builder 限制来源数量和上下文长度，并分配稳定的 `[来源N]` 编号。
+11. `/rag/retrieve` 到此返回且不生成答案、不写历史；`/rag/ask` 继续检查可回答性、生成答案并验证引用。
+12. `/rag/ask` 返回 answer 和 sources，并向 `qa_history` 写入最多 300 字符的 Chunk 预览。
 
 ## 5. 环境变量说明
 
@@ -76,6 +82,12 @@ Client
 | `DEEPSEEK_API_KEY` | DeepSeek API Key | 必填 |
 | `DEEPSEEK_BASE_URL` | DeepSeek OpenAI 兼容地址 | `https://api.deepseek.com` |
 | `DEEPSEEK_MODEL` | DeepSeek 模型 | `deepseek-v4-flash` |
+| `RAG_REWRITE_ENABLED` | 是否允许按需查询改写 | `true` |
+| `RAG_REWRITE_SCORE_THRESHOLD` | 触发改写与可回答性判断的相似度阈值 | `0.45` |
+| `RAG_REWRITE_MIN_RESULTS` | 低于该召回数时触发改写 | `2` |
+| `RAG_REWRITE_SHORT_QUERY_LENGTH` | 过短问题判定长度 | `4` |
+| `RAG_CONTEXT_MAX_CHARS` | Prompt 上下文最大字符数 | `12000` |
+| `RAG_MAX_CHUNKS_PER_SOURCE` | 每个来源最多进入上下文的 Chunk 数 | `3` |
 
 ## 6. 本地启动步骤
 
@@ -168,9 +180,9 @@ curl -X POST http://localhost:8000/rag/ask \
 
 ## 9. 后续可扩展方向
 
-- query rewrite：用 LLM 改写复杂问题，提高召回率
 - hybrid search：结合 BM25 和向量检索
-- rerank：接入 `BAAI/bge-reranker-v2-m3`
+- Obsidian Vault 扫描、Markdown 语义切分与内部链接扩展
+- 学习目标和学习状态建模
 - Redis 缓存：缓存 embedding、热点问答、会话状态
 - Agent tool 对接：把知识库检索作为工具接入 Agent
 - RAGAS 评估：构建自动化 RAG 质量评估集
@@ -374,12 +386,15 @@ Rerank 用于在 Qdrant 初始召回后，对候选 chunks 进行二次排序，
 
 ```text
 question
--> query rewrite
--> query embedding
--> Qdrant 初始召回 retrieve_top_k
+-> original query embedding
+-> Qdrant 原始查询初始召回 retrieve_top_k
+-> 按召回质量决定是否 query rewrite
+-> 可选 rewritten query embedding + Qdrant 二路召回
+-> 合并并按 chunk_id 去重
 -> rerank top_k
--> prompt context
+-> Context Builder + [来源N]
 -> DeepSeek answer
+-> citation validation
 ```
 
 推荐默认配置：
@@ -595,7 +610,7 @@ Windows 路径问题：
 
 ### POST /rag/retrieve
 
-作用：只执行检索流程，返回 query rewrite 后的检索词、Qdrant 原始召回分数和 rerank 分数，不调用 DeepSeek answer generation。
+作用：只执行 LangGraph 检索路径，返回原始查询优先、必要时双路召回后的查询信息、Qdrant 原始召回分数和 rerank 分数，不调用 DeepSeek answer generation。
 
 请求示例：
 
@@ -638,7 +653,7 @@ Windows 路径问题：
 - `document_id` 可选；传入后只检索该文档。
 - 初始召回数量为 `max(top_k * 5, 20)`，最终返回 `top_k` 个 chunk。
 - 如果没有检索结果，返回 `chunks=[]`。
-- query rewrite 如果失败，会回退到原始问题。
+- query rewrite 仅在召回质量不足、明显指代或问题过短时触发；失败后保留原始召回继续执行。
 - 该接口不调用 DeepSeek 生成答案，不写入 `qa_history`。
 
 ### GET /documents/{document_id}/chunks

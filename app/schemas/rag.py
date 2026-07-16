@@ -18,6 +18,8 @@ class SourceChunk(BaseModel):
     chunk_id: str | None = None
     document_id: str
     filename: str
+    source_type: str | None = None
+    section_title: str | None = None
     page_no: int | None = None
     chunk_index: int
     score: float
@@ -38,6 +40,7 @@ class RetrievedChunk(BaseModel):
     chunk_id: str | None = None
     document_id: str
     filename: str
+    source_type: str | None = None
     file_type: str | None = None
     page_no: int | None = None
     section_title: str | None = None
@@ -50,6 +53,8 @@ class RetrievedChunk(BaseModel):
 class RetrieveResponse(BaseModel):
     question: str
     rewritten_query: str
+    rewrite_applied: bool = False
+    rewrite_reason: str | None = None
     document_id: str | None = None
     top_k: int
     retrieved_count: int

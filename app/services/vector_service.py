@@ -117,7 +117,10 @@ class VectorService:
                     payload={
                         "chunk_id": chunk_id,
                         "document_id": document_id,
+                        "source_id": document_id,
+                        "source_type": "uploaded_document",
                         "filename": filename,
+                        "source_name": filename,
                         "file_type": file_type,
                         "page_no": chunk.page_no,
                         "section_title": chunk.section_title,

@@ -73,7 +73,7 @@ def test_ask_uses_rewritten_query_and_persists_history(db_session):
         db_session,
     )
 
-    assert embedding_service.queries == ["upload policy limit"]
+    assert embedding_service.queries == ["What is the upload size limit?", "upload policy limit"]
     assert vector_service.document_id == "doc-1"
     assert vector_service.top_k == 25
     assert rerank_service.candidate_count == 1
@@ -160,6 +160,36 @@ def test_retrieve_does_not_generate_answer():
     assert response.chunks[0].chunk_id == "doc-1_0"
     assert response.chunks[0].text == "Upload size limit is 50 MB."
     assert llm_client.generated is False
+
+
+def test_retrieve_context_compatibility_can_disable_rewrite():
+    embedding_service = FakeEmbeddingService()
+    vector_service = FakeVectorService(
+        [
+            {
+                "score": 0.3,
+                "payload": {
+                    "chunk_id": "doc-1_0",
+                    "document_id": "doc-1",
+                    "filename": "policy.txt",
+                    "chunk_index": 0,
+                    "text": "policy text",
+                },
+            }
+        ]
+    )
+    service = RagService(embedding_service, vector_service, FakeRerankService(), FakeLlmClient())
+
+    chunks, query = service.retrieve_context(
+        question="  original   question  ",
+        top_k=5,
+        use_query_rewrite=False,
+        return_query=True,
+    )
+
+    assert embedding_service.queries == ["original question"]
+    assert query == "original question"
+    assert chunks[0]["payload"]["document_id"] == "doc-1"
 
 
 def test_rewrite_query_falls_back_to_normalized_question_on_error():

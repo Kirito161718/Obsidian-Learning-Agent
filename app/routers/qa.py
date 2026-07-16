@@ -39,6 +39,7 @@ def sanitize_source_chunk(item: dict) -> QAHistorySourceChunk:
         chunk_id=item.get("chunk_id"),
         document_id=item.get("document_id"),
         filename=item.get("filename"),
+        section_title=item.get("section_title"),
         page_no=item.get("page_no"),
         chunk_index=item.get("chunk_index"),
         score=item.get("score"),

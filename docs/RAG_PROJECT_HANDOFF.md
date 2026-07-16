@@ -1,5 +1,7 @@
 # RAG 知识库项目交接与复用说明
 
+> 对于 Obsidian Learning Agent 的后续演进，以 `OBSIDIAN_LEARNING_AGENT_REUSE.md` 为准。
+
 ## 1. 文档用途
 
 本文档用于把当前 RAG 知识库能力交接给另一个项目或开发代理。阅读本文档后，应当能够判断：

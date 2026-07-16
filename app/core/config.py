@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     rerank_model: str = "BAAI/bge-reranker-v2-m3"
     rerank_top_n: int = 5
 
+    rag_rewrite_enabled: bool = True
+    rag_rewrite_score_threshold: float = 0.45
+    rag_rewrite_min_results: int = 2
+    rag_rewrite_short_query_length: int = 4
+    rag_context_max_chars: int = 12000
+    rag_max_chunks_per_source: int = 3
+
     deepseek_api_key: str = Field(default="", repr=False)
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-v4-flash"

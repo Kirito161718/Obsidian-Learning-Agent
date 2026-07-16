@@ -7,6 +7,7 @@ class QAHistorySourceChunk(BaseModel):
     chunk_id: str | None = None
     document_id: str | None = None
     filename: str | None = None
+    section_title: str | None = None
     page_no: int | None = None
     chunk_index: int | None = None
     score: float | None = None
