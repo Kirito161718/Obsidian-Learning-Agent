@@ -82,3 +82,28 @@ class LearningStatus(Base):
     project_relevance: Mapped[bool] = mapped_column(nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+
+class ObsidianNote(Base):
+    __tablename__ = "obsidian_notes"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    # 700 utf8mb4 characters stay below MySQL's 3072-byte index-key limit.
+    relative_path: Mapped[str] = mapped_column(String(700), nullable=False, unique=True)
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    title: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    observed_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    indexed_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    file_modified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    frontmatter: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    aliases: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    outbound_links: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
+    index_status: Mapped[str] = mapped_column(String(30), nullable=False, default="discovered", index=True)
+    chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_scanned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_indexed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)

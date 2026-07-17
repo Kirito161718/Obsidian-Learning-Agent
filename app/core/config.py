@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import URL, make_url
 
@@ -47,11 +47,27 @@ class Settings(BaseSettings):
     rag_context_max_chars: int = 12000
     rag_max_chunks_per_source: int = 3
 
+    obsidian_enabled: bool = False
+    obsidian_vault_path: Path | None = None
+    obsidian_include_patterns: str = "*.md,**/*.md"
+    obsidian_exclude_dirs: str = ".obsidian,.trash,Attachments,Templates,Archive,_ai_updates"
+    obsidian_exclude_paths: str = "Learning/_drafts"
+    obsidian_max_file_bytes: int = 2_097_152
+    obsidian_chunk_min_chars: int = 200
+    obsidian_chunk_target_chars: int = 1200
+    obsidian_chunk_max_chars: int = 1800
+    obsidian_atomic_block_hard_max_chars: int = 6000
+
     deepseek_api_key: str = Field(default="", repr=False)
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-v4-flash"
 
     model_config = SettingsConfigDict(env_file=BASE_DIR / ".env", env_file_encoding="utf-8", extra="ignore")
+
+    @field_validator("obsidian_vault_path", mode="before")
+    @classmethod
+    def empty_obsidian_path_is_none(cls, value: object) -> object:
+        return None if value is None or str(value).strip() == "" else value
 
     @model_validator(mode="after")
     def resolve_project_paths(self) -> "Settings":
@@ -110,6 +126,22 @@ class Settings(BaseSettings):
     @property
     def max_upload_size_bytes(self) -> int:
         return self.max_upload_size_mb * 1024 * 1024
+
+    @property
+    def obsidian_include_pattern_list(self) -> tuple[str, ...]:
+        return self._csv_values(self.obsidian_include_patterns)
+
+    @property
+    def obsidian_exclude_dir_list(self) -> tuple[str, ...]:
+        return self._csv_values(self.obsidian_exclude_dirs)
+
+    @property
+    def obsidian_exclude_path_list(self) -> tuple[str, ...]:
+        return tuple(value.replace("\\", "/").strip("/") for value in self._csv_values(self.obsidian_exclude_paths))
+
+    @staticmethod
+    def _csv_values(value: str) -> tuple[str, ...]:
+        return tuple(item.strip() for item in value.split(",") if item.strip())
 
 
 @lru_cache

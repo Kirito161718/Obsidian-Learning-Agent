@@ -251,6 +251,36 @@
       <div id="documentChunksBox" class="chunk-debug-box empty">请选择文档后点击“查看 chunks”。</div>
     </section>
 
+    <section id="obsidianPanel" class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Obsidian Vault（只读）</h2>
+          <p class="muted-text">扫描和索引只读取 Markdown；页面不提供修改、移动或删除 Vault 文件的操作。</p>
+        </div>
+        <div class="button-row">
+          <button id="obsidianScanBtn" class="secondary" type="button">预览扫描</button>
+          <button id="obsidianIndexBtn" type="button">执行增量索引</button>
+          <button id="refreshObsidianNotesBtn" class="secondary" type="button">刷新笔记</button>
+        </div>
+      </div>
+      <div id="obsidianStatusBox" class="status-grid"><div>尚未加载 Obsidian 状态。</div></div>
+      <form id="obsidianFilterForm" class="history-filter-form">
+        <div class="form-grid">
+          <label><span class="field-label">索引状态</span><input id="obsidianStatusFilter" type="text" placeholder="例如 indexed / error / missing"></label>
+          <label><span class="field-label">相对路径前缀</span><input id="obsidianPathFilter" type="text" placeholder="例如 Knowledge/RAG"></label>
+          <label><span class="field-label">标签</span><input id="obsidianTagFilter" type="text" placeholder="例如 rag"></label>
+        </div>
+      </form>
+      <div id="obsidianOperationBox" class="result-box empty">尚未执行扫描或索引。</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>标题 / 相对路径</th><th>状态</th><th>Tags</th><th>Chunks</th><th>最近索引</th><th>操作</th></tr></thead>
+          <tbody id="obsidianNotesTableBody"><tr><td colspan="6" class="empty-cell">尚未加载 Obsidian 笔记。</td></tr></tbody>
+        </table>
+      </div>
+      <div id="obsidianNoteDetailBox" class="history-detail-box empty">请选择笔记查看结构化元数据或 Qdrant chunks。</div>
+    </section>
+
     <section class="panel">
       <h2>RAG 检索调试</h2>
       <form id="retrieveForm" class="ask-form">
@@ -266,6 +296,15 @@
           <label>
             <span class="field-label">返回数量 Top K</span>
             <input id="retrieveTopKInput" type="number" min="1" max="20" value="5">
+          </label>
+          <fieldset class="source-scope-fieldset">
+            <legend class="field-label">来源范围</legend>
+            <label class="inline-check"><input id="retrieveUploadedSourceInput" type="checkbox" checked> 上传文档</label>
+            <label class="inline-check"><input id="retrieveObsidianSourceInput" type="checkbox" checked> Obsidian</label>
+          </fieldset>
+          <label>
+            <span class="field-label">Obsidian 相对路径前缀（可选，逗号分隔）</span>
+            <input id="retrievePathPrefixesInput" type="text" placeholder="Knowledge/RAG, Projects">
           </label>
         </div>
         <button id="retrieveBtn" type="submit">执行检索</button>
@@ -288,6 +327,15 @@
           <label>
             <span class="field-label">召回数量 Top K</span>
             <input id="topKInput" type="number" min="1" max="20" value="5">
+          </label>
+          <fieldset class="source-scope-fieldset">
+            <legend class="field-label">来源范围</legend>
+            <label class="inline-check"><input id="askUploadedSourceInput" type="checkbox" checked> 上传文档</label>
+            <label class="inline-check"><input id="askObsidianSourceInput" type="checkbox" checked> Obsidian</label>
+          </fieldset>
+          <label>
+            <span class="field-label">Obsidian 相对路径前缀（可选，逗号分隔）</span>
+            <input id="askPathPrefixesInput" type="text" placeholder="Knowledge/RAG, Projects">
           </label>
         </div>
         <button id="askBtn" type="submit">提问</button>

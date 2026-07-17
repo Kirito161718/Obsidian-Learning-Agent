@@ -55,8 +55,14 @@ class RagNodes:
             "rewrite_reason": None,
             "rewrite_enabled": state.get("rewrite_enabled"),
             "document_id": state.get("document_id"),
+            "source_types": state.get("source_types"),
+            "source_path_prefixes": state.get("source_path_prefixes"),
             "top_k": int(state.get("top_k") or 5),
-            "retrieval_scope": {"document_id": state.get("document_id")},
+            "retrieval_scope": {
+                "document_id": state.get("document_id"),
+                "source_types": state.get("source_types"),
+                "source_path_prefixes": state.get("source_path_prefixes"),
+            },
             "original_results": [],
             "rewritten_results": [],
             "merged_results": [],
@@ -280,9 +286,21 @@ class RagNodes:
     def _retrieve(self, query: str, state: RagState) -> list[RetrievedChunk]:
         vector = self.embedding_service.embed_query(query)
         retrieve_top_k = max(state["top_k"] * 5, 20)
-        raw = self.vector_service.search(
-            query_vector=vector,
-            top_k=retrieve_top_k,
-            document_id=state.get("document_id"),
-        )
+        scope = {
+            "source_types": state.get("source_types"),
+            "source_path_prefixes": state.get("source_path_prefixes"),
+        }
+        if any(scope.values()):
+            raw = self.vector_service.search(
+                query_vector=vector,
+                top_k=retrieve_top_k,
+                document_id=state.get("document_id"),
+                **scope,
+            )
+        else:
+            raw = self.vector_service.search(
+                query_vector=vector,
+                top_k=retrieve_top_k,
+                document_id=state.get("document_id"),
+            )
         return [RetrievedChunk.from_search_result(item) for item in raw]

@@ -55,6 +55,8 @@ class RagService:
             question=request.question,
             document_id=request.document_id,
             top_k=request.top_k,
+            source_types=request.source_types,
+            source_path_prefixes=request.source_path_prefixes,
             db=db,
         )
         sources = [self._to_source_chunk(chunk) for chunk in state.get("context_chunks", [])]
@@ -87,6 +89,8 @@ class RagService:
             question=request.question,
             document_id=request.document_id,
             top_k=request.top_k,
+            source_types=request.source_types,
+            source_path_prefixes=request.source_path_prefixes,
         )
         chunks = [self._to_retrieved_chunk(chunk) for chunk in state.get("context_chunks", [])]
         return RetrieveResponse(
@@ -103,10 +107,17 @@ class RagService:
     def _to_source_chunk(self, chunk: RetrievedChunk) -> SourceChunk:
         return SourceChunk(
             chunk_id=chunk.chunk_id,
-            document_id=chunk.source_id,
-            filename=chunk.source_name,
+            document_id=chunk.source_id if chunk.source_type == "uploaded_document" else None,
+            filename=str(chunk.metadata.get("filename") or chunk.source_name),
             source_type=chunk.source_type,
+            source_id=chunk.source_id,
+            source_name=chunk.source_name,
+            source_path=chunk.source_path,
+            heading_path=list(chunk.metadata.get("heading_path") or []),
             section_title=chunk.section_title,
+            line_start=chunk.metadata.get("line_start"),
+            line_end=chunk.metadata.get("line_end"),
+            tags=list(chunk.metadata.get("tags") or []),
             page_no=chunk.page_no,
             chunk_index=chunk.chunk_index or 0,
             score=chunk.score or 0.0,
@@ -117,12 +128,19 @@ class RagService:
     def _to_retrieved_chunk(self, chunk: RetrievedChunk) -> ApiRetrievedChunk:
         return ApiRetrievedChunk(
             chunk_id=chunk.chunk_id,
-            document_id=chunk.source_id,
-            filename=chunk.source_name,
+            document_id=chunk.source_id if chunk.source_type == "uploaded_document" else None,
+            filename=str(chunk.metadata.get("filename") or chunk.source_name),
             source_type=chunk.source_type,
+            source_id=chunk.source_id,
+            source_name=chunk.source_name,
+            source_path=chunk.source_path,
+            heading_path=list(chunk.metadata.get("heading_path") or []),
             file_type=chunk.metadata.get("file_type"),
             page_no=chunk.page_no,
             section_title=chunk.section_title,
+            line_start=chunk.metadata.get("line_start"),
+            line_end=chunk.metadata.get("line_end"),
+            tags=list(chunk.metadata.get("tags") or []),
             chunk_index=chunk.chunk_index or 0,
             score=chunk.score or 0.0,
             rerank_score=chunk.rerank_score,

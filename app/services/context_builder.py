@@ -55,7 +55,12 @@ class ContextBuilder:
                     "source_id": chunk.source_id,
                     "source_type": chunk.source_type,
                     "source_name": chunk.source_name,
+                    "source_path": chunk.source_path,
+                    "heading_path": list(chunk.metadata.get("heading_path") or []),
                     "section_title": chunk.section_title,
+                    "line_start": chunk.metadata.get("line_start"),
+                    "line_end": chunk.metadata.get("line_end"),
+                    "tags": list(chunk.metadata.get("tags") or []),
                     "page_no": chunk.page_no,
                     "chunk_index": chunk.chunk_index,
                 }
@@ -64,6 +69,16 @@ class ContextBuilder:
         return ContextBuildResult(context_text="\n\n".join(blocks), context_sources=sources, chunks=selected)
 
     def _format_header(self, chunk: RetrievedChunk, citation_index: int) -> str:
+        if chunk.source_type == "obsidian_note":
+            heading_path = " > ".join(chunk.metadata.get("heading_path") or []) or "未标注"
+            return (
+                f"[来源{citation_index}]\n"
+                "来源类型：Obsidian 笔记\n"
+                f"笔记：{chunk.source_name}\n"
+                f"相对路径：{chunk.source_path or '未标注'}\n"
+                f"标题路径：{heading_path}\n"
+                "内容："
+            )
         section = chunk.section_title or "未标注"
         page = str(chunk.page_no) if chunk.page_no is not None else "未标注"
         return (

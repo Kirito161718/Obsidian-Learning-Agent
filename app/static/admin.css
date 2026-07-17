@@ -411,6 +411,25 @@ code {
   min-width: 170px;
 }
 
+.source-scope-fieldset {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 16px;
+}
+
+.obsidian-path {
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
 .loading {
   opacity: 0.68;
 }

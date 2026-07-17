@@ -33,8 +33,24 @@ class RetrievedChunk(BaseModel):
         chunk_index = int(raw_chunk_index) if raw_chunk_index is not None else 0
         chunk_id = str(payload.get("chunk_id") or f"{source_id}_{chunk_index}")
         metadata = dict(payload.get("metadata") or {})
+        if payload.get("filename") is not None:
+            metadata.setdefault("filename", payload["filename"])
         if payload.get("file_type") is not None:
             metadata.setdefault("file_type", payload["file_type"])
+        for key in (
+            "heading_path",
+            "heading_level",
+            "line_start",
+            "line_end",
+            "block_types",
+            "content_hash",
+            "parent_section_id",
+            "tags",
+            "links",
+            "note_hash",
+        ):
+            if payload.get(key) is not None:
+                metadata.setdefault(key, payload[key])
         return cls(
             chunk_id=chunk_id,
             source_id=source_id,
@@ -53,11 +69,12 @@ class RetrievedChunk(BaseModel):
     def to_rerank_item(self) -> dict[str, Any]:
         payload = {
             "chunk_id": self.chunk_id,
-            "document_id": self.source_id,
+            "document_id": self.source_id if self.source_type == "uploaded_document" else None,
             "source_id": self.source_id,
             "source_type": self.source_type,
-            "filename": self.source_name,
+            "filename": str(self.metadata.get("filename") or self.source_name),
             "source_name": self.source_name,
+            "source_path": self.source_path,
             "section_title": self.section_title,
             "page_no": self.page_no,
             "chunk_index": self.chunk_index,
@@ -66,6 +83,20 @@ class RetrievedChunk(BaseModel):
         }
         if self.metadata.get("file_type") is not None:
             payload["file_type"] = self.metadata["file_type"]
+        for key in (
+            "heading_path",
+            "heading_level",
+            "line_start",
+            "line_end",
+            "block_types",
+            "content_hash",
+            "parent_section_id",
+            "tags",
+            "links",
+            "note_hash",
+        ):
+            if self.metadata.get(key) is not None:
+                payload[key] = self.metadata[key]
         return {
             "score": self.score if self.score is not None else 0.0,
             "rerank_score": self.rerank_score,

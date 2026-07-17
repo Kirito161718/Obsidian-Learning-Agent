@@ -4,6 +4,7 @@ const state = {
   rerankEnabled: false,
   goals: [],
   learningStatuses: [],
+  obsidianNotes: [],
 };
 
 const elements = {
@@ -54,16 +55,33 @@ const elements = {
   documentDetail: document.getElementById("documentDetail"),
   clearDocumentChunksBtn: document.getElementById("clearDocumentChunksBtn"),
   documentChunksBox: document.getElementById("documentChunksBox"),
+  obsidianStatusBox: document.getElementById("obsidianStatusBox"),
+  obsidianScanBtn: document.getElementById("obsidianScanBtn"),
+  obsidianIndexBtn: document.getElementById("obsidianIndexBtn"),
+  refreshObsidianNotesBtn: document.getElementById("refreshObsidianNotesBtn"),
+  obsidianFilterForm: document.getElementById("obsidianFilterForm"),
+  obsidianStatusFilter: document.getElementById("obsidianStatusFilter"),
+  obsidianPathFilter: document.getElementById("obsidianPathFilter"),
+  obsidianTagFilter: document.getElementById("obsidianTagFilter"),
+  obsidianOperationBox: document.getElementById("obsidianOperationBox"),
+  obsidianNotesTableBody: document.getElementById("obsidianNotesTableBody"),
+  obsidianNoteDetailBox: document.getElementById("obsidianNoteDetailBox"),
   retrieveForm: document.getElementById("retrieveForm"),
   retrieveQuestionInput: document.getElementById("retrieveQuestionInput"),
   retrieveDocumentIdInput: document.getElementById("retrieveDocumentIdInput"),
   retrieveTopKInput: document.getElementById("retrieveTopKInput"),
+  retrieveUploadedSourceInput: document.getElementById("retrieveUploadedSourceInput"),
+  retrieveObsidianSourceInput: document.getElementById("retrieveObsidianSourceInput"),
+  retrievePathPrefixesInput: document.getElementById("retrievePathPrefixesInput"),
   retrieveBtn: document.getElementById("retrieveBtn"),
   retrieveResultBox: document.getElementById("retrieveResultBox"),
   askForm: document.getElementById("askForm"),
   questionInput: document.getElementById("questionInput"),
   askDocumentIdInput: document.getElementById("askDocumentIdInput"),
   topKInput: document.getElementById("topKInput"),
+  askUploadedSourceInput: document.getElementById("askUploadedSourceInput"),
+  askObsidianSourceInput: document.getElementById("askObsidianSourceInput"),
+  askPathPrefixesInput: document.getElementById("askPathPrefixesInput"),
   askBtn: document.getElementById("askBtn"),
   answerBox: document.getElementById("answerBox"),
   sourcesList: document.getElementById("sourcesList"),
@@ -468,6 +486,9 @@ function renderRetrieveResult(data) {
         <strong>结果 ${index + 1}</strong>
         <span>chunk_id：<code>${displayValue(chunk.chunk_id)}</code></span>
         <span>document_id：<code>${displayValue(chunk.document_id)}</code></span>
+        <span>source_type：${displayValue(chunk.source_type)}</span>
+        <span>相对路径：${displayValue(chunk.source_path)}</span>
+        <span>标题路径：${displayValue((chunk.heading_path || []).join(" > "))}</span>
         <span>文件名：${displayValue(chunk.filename)}</span>
         <span>类型：${displayValue(chunk.file_type)}</span>
         <span>页码：${displayValue(chunk.page_no)}</span>
@@ -502,6 +523,18 @@ async function retrieveRag(event) {
   };
   if (documentId) {
     payload.document_id = documentId;
+  }
+  try {
+    addSourceScope(
+      payload,
+      elements.retrieveUploadedSourceInput,
+      elements.retrieveObsidianSourceInput,
+      elements.retrievePathPrefixesInput,
+      documentId,
+    );
+  } catch (error) {
+    setError(error.message);
+    return;
   }
 
   setLoading(elements.retrieveBtn, true);
@@ -598,6 +631,12 @@ function renderSources(sources) {
         <div class="source-meta">
           <strong>来源 ${index + 1}</strong>
           <span>文件名：${displayValue(source.filename)}</span>
+          <span>来源：${displayValue(source.source_type)}</span>
+          <span>相对路径：${displayValue(source.source_path)}</span>
+          <span>标题路径：${displayValue((source.heading_path || []).join(" > "))}</span>
+          <span>来源：${displayValue(source.source_type)}</span>
+          <span>相对路径：${displayValue(source.source_path)}</span>
+          <span>标题路径：${displayValue((source.heading_path || []).join(" > "))}</span>
           <span>页码：${displayValue(source.page_no)}</span>
           <span>分块：${displayValue(source.chunk_index)}</span>
           <span>分数：${displayValue(score)}</span>
@@ -745,6 +784,18 @@ async function askRag(event) {
   };
   if (documentId) {
     payload.document_id = documentId;
+  }
+  try {
+    addSourceScope(
+      payload,
+      elements.askUploadedSourceInput,
+      elements.askObsidianSourceInput,
+      elements.askPathPrefixesInput,
+      documentId,
+    );
+  } catch (error) {
+    setError(error.message);
+    return;
   }
 
   setLoading(elements.askBtn, true);
@@ -1050,6 +1101,165 @@ async function deleteLearningStatus(statusId) {
   }
 }
 
+function addSourceScope(payload, uploadedInput, obsidianInput, prefixesInput, documentId) {
+  if (documentId) {
+    payload.source_types = ["uploaded_document"];
+    return;
+  }
+  const sourceTypes = [];
+  if (uploadedInput.checked) sourceTypes.push("uploaded_document");
+  if (obsidianInput.checked) sourceTypes.push("obsidian_note");
+  if (sourceTypes.length === 0) throw new Error("请至少选择一种检索来源。");
+  const prefixes = splitCommaValues(prefixesInput.value).map((value) => value.replaceAll("\\", "/").replace(/^\/+|\/+$/g, ""));
+  if (prefixes.length && !obsidianInput.checked) throw new Error("相对路径前缀只适用于 Obsidian 来源。");
+  if (prefixes.some((value) => !value || value.includes("..") || /^[A-Za-z]:/.test(value))) {
+    throw new Error("Obsidian 路径前缀必须是安全的 Vault 相对路径。");
+  }
+  payload.source_types = sourceTypes;
+  if (prefixes.length) payload.source_path_prefixes = prefixes;
+}
+
+function renderObsidianOperation(data, label) {
+  const counts = data?.counts || {};
+  const items = Array.isArray(data?.items) ? data.items : [];
+  elements.obsidianOperationBox.classList.remove("empty");
+  elements.obsidianOperationBox.innerHTML = `
+    <strong>${escapeText(label)}</strong>
+    <p>新增 ${displayValue(counts.new || 0)} · 变更 ${displayValue(counts.changed || 0)} · 未变 ${displayValue(counts.unchanged || 0)} · 缺失 ${displayValue(counts.missing || 0)} · 跳过 ${displayValue(counts.skipped || 0)} · 错误 ${displayValue(counts.error || 0)}</p>
+    <details><summary>查看结果（${items.length}）</summary>
+      <div class="chunk-text">${items.map((item) => `${escapeText(item.kind)} · ${escapeText(item.relative_path)}${item.reason ? ` · ${escapeText(item.reason)}` : ""}`).join("\n") || "无记录"}</div>
+    </details>
+  `;
+}
+
+async function loadObsidianStatus() {
+  try {
+    const data = await requestJson("/obsidian/status");
+    elements.obsidianStatusBox.innerHTML = `
+      <div><span class="field-label">启用</span>${data.enabled ? "是" : "否"}</div>
+      <div><span class="field-label">Vault 可用</span>${data.available ? "是" : "否"}</div>
+      <div><span class="field-label">Vault 名称</span>${displayValue(data.vault_name)}</div>
+      <div><span class="field-label">MySQL 笔记数</span>${displayValue(data.note_count)}</div>
+      <div><span class="field-label">最近扫描</span>${displayValue(data.last_scanned_at)}</div>
+      <div><span class="field-label">最近索引</span>${displayValue(data.last_indexed_at)}</div>
+    `;
+    elements.obsidianScanBtn.disabled = !data.enabled || !data.available;
+    elements.obsidianIndexBtn.disabled = !data.enabled || !data.available;
+  } catch (error) {
+    elements.obsidianStatusBox.textContent = "Obsidian 状态加载失败。";
+    setError(error.message);
+  }
+}
+
+function renderObsidianNotes(notes) {
+  if (!Array.isArray(notes) || notes.length === 0) {
+    elements.obsidianNotesTableBody.innerHTML = '<tr><td colspan="6" class="empty-cell">没有匹配的 Obsidian 笔记。</td></tr>';
+    return;
+  }
+  elements.obsidianNotesTableBody.innerHTML = notes.map((note) => `
+    <tr>
+      <td><strong>${displayValue(note.title || note.file_name)}</strong><div class="obsidian-path">${displayValue(note.relative_path)}</div></td>
+      <td>${displayValue(note.index_status)}${note.last_error ? `<br><span class="muted-text">${displayValue(note.last_error)}</span>` : ""}</td>
+      <td>${displayValue((note.tags || []).join(", "))}</td>
+      <td>${displayValue(note.chunk_count)}</td>
+      <td>${displayValue(note.last_indexed_at)}</td>
+      <td><div class="button-row compact">
+        <button class="secondary" type="button" data-obsidian-action="detail" data-note-id="${escapeText(note.id)}">详情</button>
+        <button class="secondary" type="button" data-obsidian-action="chunks" data-note-id="${escapeText(note.id)}">Chunks</button>
+        <button type="button" data-obsidian-action="reindex" data-note-id="${escapeText(note.id)}">重新索引</button>
+      </div></td>
+    </tr>
+  `).join("");
+}
+
+async function refreshObsidianNotes(event) {
+  if (event) event.preventDefault();
+  const params = new URLSearchParams();
+  const status = elements.obsidianStatusFilter.value.trim();
+  const pathPrefix = elements.obsidianPathFilter.value.trim();
+  const tag = elements.obsidianTagFilter.value.trim();
+  if (status) params.set("status", status);
+  if (pathPrefix) params.set("path_prefix", pathPrefix);
+  if (tag) params.set("tag", tag);
+  setLoading(elements.refreshObsidianNotesBtn, true);
+  try {
+    const data = await requestJson(`/obsidian/notes${params.toString() ? `?${params}` : ""}`);
+    state.obsidianNotes = Array.isArray(data?.items) ? data.items : [];
+    renderObsidianNotes(state.obsidianNotes);
+  } catch (error) {
+    setError(error.message);
+  } finally {
+    setLoading(elements.refreshObsidianNotesBtn, false);
+  }
+}
+
+async function runObsidianOperation(kind) {
+  const button = kind === "scan" ? elements.obsidianScanBtn : elements.obsidianIndexBtn;
+  setLoading(button, true);
+  clearErrors();
+  try {
+    const endpoint = kind === "scan" ? "/obsidian/scan" : "/obsidian/index";
+    const data = await requestJson(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: kind === "index" ? "{}" : undefined });
+    renderObsidianOperation(data, kind === "scan" ? "只读扫描预览" : "增量索引完成");
+    if (kind === "index") await refreshObsidianNotes();
+    await loadObsidianStatus();
+  } catch (error) {
+    setError(error.message);
+  } finally {
+    setLoading(button, false);
+  }
+}
+
+async function loadObsidianNoteDetail(noteId) {
+  try {
+    const note = await requestJson(`/obsidian/notes/${encodeURIComponent(noteId)}`);
+    elements.obsidianNoteDetailBox.classList.remove("empty");
+    elements.obsidianNoteDetailBox.innerHTML = `
+      <h3>${displayValue(note.title || note.file_name)}</h3>
+      <p class="obsidian-path">${displayValue(note.relative_path)}</p>
+      <div class="debug-summary">
+        <div><span class="field-label">状态</span>${displayValue(note.index_status)}</div>
+        <div><span class="field-label">Chunks</span>${displayValue(note.chunk_count)}</div>
+        <div><span class="field-label">Tags</span>${displayValue((note.tags || []).join(", "))}</div>
+        <div><span class="field-label">Aliases</span>${displayValue((note.aliases || []).join(", "))}</div>
+      </div>
+      <details><summary>Frontmatter 元数据</summary><div class="chunk-text">${displayValue(JSON.stringify(note.frontmatter || {}, null, 2))}</div></details>
+      <details><summary>出站 WikiLinks</summary><div class="chunk-text">${displayValue(JSON.stringify(note.outbound_links || [], null, 2))}</div></details>
+    `;
+  } catch (error) {
+    setError(error.message);
+  }
+}
+
+async function loadObsidianChunks(noteId) {
+  try {
+    const data = await requestJson(`/obsidian/notes/${encodeURIComponent(noteId)}/chunks`);
+    const chunks = Array.isArray(data?.items) ? data.items : [];
+    elements.obsidianNoteDetailBox.classList.remove("empty");
+    elements.obsidianNoteDetailBox.innerHTML = chunks.length ? chunks.map((chunk) => `
+      <article class="chunk-card"><div class="chunk-meta">
+        <span>路径：${displayValue(chunk.source_path)}</span><span>标题：${displayValue((chunk.heading_path || []).join(" > "))}</span>
+        <span>行：${displayValue(chunk.line_start)}-${displayValue(chunk.line_end)}</span><span>类型：${displayValue((chunk.block_types || []).join(", "))}</span>
+      </div><details><summary>查看文本</summary><div class="chunk-text">${displayValue(chunk.text)}</div></details></article>
+    `).join("") : '<p class="empty">该笔记当前没有 Qdrant chunks。</p>';
+  } catch (error) {
+    setError(error.message);
+  }
+}
+
+async function reindexObsidianNote(noteId) {
+  setLoading(elements.obsidianIndexBtn, true);
+  try {
+    const data = await requestJson(`/obsidian/notes/${encodeURIComponent(noteId)}/reindex`, { method: "POST" });
+    renderObsidianOperation(data, "单笔记重新索引完成");
+    await refreshObsidianNotes();
+  } catch (error) {
+    setError(error.message);
+  } finally {
+    setLoading(elements.obsidianIndexBtn, false);
+  }
+}
+
 elements.checkHealthBtn.addEventListener("click", checkHealth);
 elements.goalForm.addEventListener("submit", saveGoal);
 elements.cancelGoalEditBtn.addEventListener("click", resetGoalForm);
@@ -1065,6 +1275,10 @@ elements.reindexDetailBtn.addEventListener("click", () => reindexDocument(state.
 elements.deleteDetailBtn.addEventListener("click", () => deleteDocument(state.selectedDocumentId));
 elements.purgeDetailBtn.addEventListener("click", () => purgeDocument(state.selectedDocumentId));
 elements.clearDocumentChunksBtn.addEventListener("click", clearDocumentChunks);
+elements.obsidianScanBtn.addEventListener("click", () => runObsidianOperation("scan"));
+elements.obsidianIndexBtn.addEventListener("click", () => runObsidianOperation("index"));
+elements.refreshObsidianNotesBtn.addEventListener("click", refreshObsidianNotes);
+elements.obsidianFilterForm.addEventListener("submit", refreshObsidianNotes);
 elements.retrieveForm.addEventListener("submit", retrieveRag);
 elements.askForm.addEventListener("submit", askRag);
 elements.refreshHistoryBtn.addEventListener("click", refreshHistory);
@@ -1107,8 +1321,17 @@ elements.learningStatusTableBody.addEventListener("click", (event) => {
   if (button.dataset.learningAction === "edit") editLearningStatus(button.dataset.statusId);
   if (button.dataset.learningAction === "delete") deleteLearningStatus(button.dataset.statusId);
 });
+elements.obsidianNotesTableBody.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-note-id]");
+  if (!button) return;
+  if (button.dataset.obsidianAction === "detail") loadObsidianNoteDetail(button.dataset.noteId);
+  if (button.dataset.obsidianAction === "chunks") loadObsidianChunks(button.dataset.noteId);
+  if (button.dataset.obsidianAction === "reindex") reindexObsidianNote(button.dataset.noteId);
+});
 
 checkHealth();
 loadAdminStatus();
+loadObsidianStatus();
+refreshObsidianNotes();
 refreshHistory();
 refreshGoals().then(refreshLearningStatuses);

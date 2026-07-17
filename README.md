@@ -919,3 +919,46 @@ DELETE /documents/{document_id}/purge
 - `file_hash`：上传文件 SHA256，用于重复上传判断。
 - `deleted_at`：软删除时间。
 - `purged_at`：彻底清理时间。
+
+## Obsidian Vault 只读接入（阶段 2）
+
+项目现在可以显式扫描一个本地 Obsidian Vault，将 Markdown 按标题和块结构切分后增量写入现有 Qdrant 集合。Vault 始终是只读数据源：系统不会修改、移动、复制或删除 Markdown，也不会写入 `.obsidian`，且没有文件监听器或自动扫描任务。
+
+在 `.env` 中启用并配置绝对路径：
+
+```dotenv
+OBSIDIAN_ENABLED=true
+OBSIDIAN_VAULT_PATH=C:\path\to\your\vault
+OBSIDIAN_INCLUDE_PATTERNS=*.md,**/*.md
+OBSIDIAN_EXCLUDE_DIRS=.obsidian,.trash,Attachments,Templates,Archive,_ai_updates
+OBSIDIAN_EXCLUDE_PATHS=Learning/_drafts
+OBSIDIAN_MAX_FILE_BYTES=2097152
+OBSIDIAN_CHUNK_MIN_CHARS=200
+OBSIDIAN_CHUNK_TARGET_CHARS=1200
+OBSIDIAN_CHUNK_MAX_CHARS=1800
+OBSIDIAN_ATOMIC_BLOCK_HARD_MAX_CHARS=6000
+```
+
+主要接口：
+
+- `GET /obsidian/status`：返回安全状态摘要，不暴露 Vault 绝对路径。
+- `POST /obsidian/scan`：只读 dry-run，返回 new/changed/unchanged/missing/skipped/error，不写 MySQL、Qdrant 或 Vault。
+- `POST /obsidian/index`：执行显式增量索引。
+- `GET /obsidian/notes`、`GET /obsidian/notes/{id}`：查看 MySQL 中的结构化元数据。
+- `GET /obsidian/notes/{id}/chunks`：查看当前 Qdrant chunks。
+- `POST /obsidian/notes/{id}/reindex`：显式重新索引一篇笔记。
+
+`/rag/retrieve` 与 `/rag/ask` 新增可选 `source_types` 和 `source_path_prefixes`：
+
+```json
+{
+  "question": "LangGraph 的 State 如何设计？",
+  "top_k": 5,
+  "source_types": ["obsidian_note"],
+  "source_path_prefixes": ["Knowledge/LangGraph"]
+}
+```
+
+默认仍同时检索上传文档与 Obsidian。`document_id` 只适用于上传文档；路径前缀必须是安全的 Vault 相对路径。旧 Qdrant Point 缺少 `source_type` 时继续视为 `uploaded_document`，无需重新生成历史 Embedding。
+
+Markdown 解析支持 YAML Frontmatter、H1～H6、段落、列表、围栏代码、表格、引用、Callout、WikiLink/嵌入和标签。切分遵循标题边界；代码和表格使用结构安全拆分。MySQL `obsidian_notes` 只保存相对路径、哈希、标签、链接和索引状态等元数据，不保存 Markdown 正文；正文仅存在于原始 Vault 与 Qdrant chunk payload。完整说明见 `docs/OBSIDIAN_VAULT_INTEGRATION.md`。

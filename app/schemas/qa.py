@@ -1,13 +1,21 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class QAHistorySourceChunk(BaseModel):
     chunk_id: str | None = None
     document_id: str | None = None
     filename: str | None = None
+    source_id: str | None = None
+    source_type: str | None = None
+    source_name: str | None = None
+    source_path: str | None = None
+    heading_path: list[str] = Field(default_factory=list)
     section_title: str | None = None
+    line_start: int | None = None
+    line_end: int | None = None
+    tags: list[str] = Field(default_factory=list)
     page_no: int | None = None
     chunk_index: int | None = None
     score: float | None = None
