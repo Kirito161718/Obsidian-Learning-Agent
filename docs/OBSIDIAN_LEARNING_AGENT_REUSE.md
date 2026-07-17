@@ -20,6 +20,8 @@ RAG 主链已经由 LangGraph 编排。`RagService` 作为 API 兼容门面，�
 - `expand_links_placeholder` 节点已预留，但当前只原样传递结果，不执行真实链接扩展。
 - 本阶段不使用 LangGraph Checkpointer，也不把完整 State 落盘。
 
+阶段 1 已增加单用户学习目标、学习状态和确定性重要指数。这些数据保存在 MySQL 中，只能由用户通过 CRUD 接口或本地管理页面修改，当前不会注入 RAG Context，也不会由模型自动更新。
+
 ## 为 Obsidian Note 预留的数据结构
 
 内部统一使用 `RetrievedChunk`，字段包含 `source_id`、`source_type`、`source_name`、章节、页码、Chunk 序号、文本和两类相关性分数。当前上传文档映射为：
@@ -36,8 +38,8 @@ source_name = filename
 
 以下内容不属于现阶段完成范围：
 
-- 用户学习目标与目标分解。
-- 学习状态、进度和掌握度建模。
+- 自动目标分解、截止日期和父子目标。
+- 学习进度历史与自动掌握度推断。
 - Obsidian Vault 扫描与增量同步。
 - Markdown 标题语义切分。
 - Obsidian 内部链接的真实检索和扩展。

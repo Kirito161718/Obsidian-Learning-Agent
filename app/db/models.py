@@ -52,3 +52,33 @@ class Feedback(Base):
     rating: Mapped[int] = mapped_column(Integer, nullable=False)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class LearningGoal(Base):
+    __tablename__ = "learning_goals"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    goal_type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", index=True)
+    related_topics: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+
+class LearningStatus(Base):
+    __tablename__ = "learning_status"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    topic: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="not_started", index=True)
+    mastery_level: Mapped[int] = mapped_column(Integer, nullable=False, default=0, index=True)
+    manual_importance: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    current_problem: Mapped[str | None] = mapped_column(Text, nullable=True)
+    related_goal_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    related_note_refs: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    project_relevance: Mapped[bool] = mapped_column(nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
