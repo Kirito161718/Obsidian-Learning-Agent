@@ -2,6 +2,8 @@ const state = {
   selectedDocumentId: null,
   selectedDocumentStatus: null,
   rerankEnabled: false,
+  goals: [],
+  learningStatuses: [],
 };
 
 const elements = {
@@ -11,6 +13,32 @@ const elements = {
   rerankModelText: document.getElementById("rerankModelText"),
   rerankTopNText: document.getElementById("rerankTopNText"),
   rerankHintText: document.getElementById("rerankHintText"),
+  goalForm: document.getElementById("goalForm"),
+  goalIdInput: document.getElementById("goalIdInput"),
+  goalNameInput: document.getElementById("goalNameInput"),
+  goalTypeSelect: document.getElementById("goalTypeSelect"),
+  goalDescriptionInput: document.getElementById("goalDescriptionInput"),
+  goalPriorityInput: document.getElementById("goalPriorityInput"),
+  goalStatusSelect: document.getElementById("goalStatusSelect"),
+  goalTopicsInput: document.getElementById("goalTopicsInput"),
+  saveGoalBtn: document.getElementById("saveGoalBtn"),
+  cancelGoalEditBtn: document.getElementById("cancelGoalEditBtn"),
+  refreshGoalsBtn: document.getElementById("refreshGoalsBtn"),
+  goalsTableBody: document.getElementById("goalsTableBody"),
+  learningStatusForm: document.getElementById("learningStatusForm"),
+  learningStatusIdInput: document.getElementById("learningStatusIdInput"),
+  learningTopicInput: document.getElementById("learningTopicInput"),
+  learningStatusSelect: document.getElementById("learningStatusSelect"),
+  masteryLevelInput: document.getElementById("masteryLevelInput"),
+  manualImportanceInput: document.getElementById("manualImportanceInput"),
+  currentProblemInput: document.getElementById("currentProblemInput"),
+  learningGoalSelect: document.getElementById("learningGoalSelect"),
+  relatedNoteRefsInput: document.getElementById("relatedNoteRefsInput"),
+  projectRelevanceInput: document.getElementById("projectRelevanceInput"),
+  saveLearningStatusBtn: document.getElementById("saveLearningStatusBtn"),
+  cancelLearningStatusEditBtn: document.getElementById("cancelLearningStatusEditBtn"),
+  refreshLearningStatusBtn: document.getElementById("refreshLearningStatusBtn"),
+  learningStatusTableBody: document.getElementById("learningStatusTableBody"),
   checkHealthBtn: document.getElementById("checkHealthBtn"),
   uploadForm: document.getElementById("uploadForm"),
   fileInput: document.getElementById("fileInput"),
@@ -742,7 +770,293 @@ async function askRag(event) {
   }
 }
 
+const goalTypeLabels = {
+  job: "求职目标",
+  learning: "学习目标",
+  project: "项目目标",
+  skill: "技能目标",
+};
+
+const goalStatusLabels = {
+  active: "进行中",
+  paused: "已暂停",
+  completed: "已完成",
+};
+
+const learningStatusLabels = {
+  not_started: "未开始",
+  learning: "学习中",
+  practicing: "实践中",
+  mastered: "已掌握",
+  paused: "暂停",
+};
+
+function splitCommaValues(value) {
+  return String(value || "").split(/[,，]/).map((item) => item.trim()).filter(Boolean);
+}
+
+function splitLineValues(value) {
+  return String(value || "").split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+}
+
+function resetGoalForm() {
+  elements.goalForm.reset();
+  elements.goalIdInput.value = "";
+  elements.goalPriorityInput.value = "3";
+  elements.goalStatusSelect.value = "active";
+  elements.saveGoalBtn.textContent = "新增目标";
+}
+
+function populateGoalOptions(selectedIds = []) {
+  const selected = new Set(selectedIds);
+  elements.learningGoalSelect.innerHTML = state.goals.map((goal) => `
+    <option value="${escapeText(goal.id)}" ${selected.has(goal.id) ? "selected" : ""}>
+      ${displayValue(goal.name)}（优先级 ${displayValue(goal.priority)}，${displayValue(goalStatusLabels[goal.status])}）
+    </option>
+  `).join("");
+}
+
+function renderGoals(goals) {
+  if (!Array.isArray(goals) || goals.length === 0) {
+    elements.goalsTableBody.innerHTML = '<tr><td colspan="6" class="empty-cell">没有学习目标。</td></tr>';
+    return;
+  }
+  elements.goalsTableBody.innerHTML = goals.map((goal) => {
+    const transitionButtons = goal.status === "paused"
+      ? `<button type="button" data-goal-action="status" data-status="active" data-goal-id="${escapeText(goal.id)}">恢复</button>`
+      : goal.status === "completed"
+        ? `<button type="button" data-goal-action="status" data-status="active" data-goal-id="${escapeText(goal.id)}">恢复</button>`
+        : `<button class="secondary" type="button" data-goal-action="status" data-status="paused" data-goal-id="${escapeText(goal.id)}">暂停</button>
+           <button type="button" data-goal-action="status" data-status="completed" data-goal-id="${escapeText(goal.id)}">完成</button>`;
+    return `
+      <tr>
+        <td><strong>${displayValue(goal.name)}</strong><br><span class="muted-text">${displayValue(goal.description)}</span></td>
+        <td>${displayValue(goalTypeLabels[goal.goal_type] || goal.goal_type)}</td>
+        <td>${displayValue(goal.priority)}</td>
+        <td><span class="status ${statusClass(goal.status)}">${displayValue(goalStatusLabels[goal.status] || goal.status)}</span></td>
+        <td>${displayValue((goal.related_topics || []).join("、"))}</td>
+        <td><div class="button-row compact">
+          <button class="secondary" type="button" data-goal-action="edit" data-goal-id="${escapeText(goal.id)}">编辑</button>
+          ${transitionButtons}
+          <button class="danger" type="button" data-goal-action="delete" data-goal-id="${escapeText(goal.id)}">删除</button>
+        </div></td>
+      </tr>
+    `;
+  }).join("");
+}
+
+async function refreshGoals() {
+  clearErrors();
+  setLoading(elements.refreshGoalsBtn, true);
+  const selectedIds = Array.from(elements.learningGoalSelect.selectedOptions).map((option) => option.value);
+  try {
+    const data = await requestJson("/goals");
+    state.goals = Array.isArray(data?.items) ? data.items : [];
+    renderGoals(state.goals);
+    populateGoalOptions(selectedIds);
+  } catch (error) {
+    elements.goalsTableBody.innerHTML = '<tr><td colspan="6" class="empty-cell">加载学习目标失败。</td></tr>';
+    setError(error.message);
+  } finally {
+    setLoading(elements.refreshGoalsBtn, false);
+  }
+}
+
+async function saveGoal(event) {
+  event.preventDefault();
+  clearErrors();
+  const goalId = elements.goalIdInput.value;
+  const payload = {
+    name: elements.goalNameInput.value.trim(),
+    goal_type: elements.goalTypeSelect.value,
+    description: elements.goalDescriptionInput.value.trim() || null,
+    priority: Number.parseInt(elements.goalPriorityInput.value, 10),
+    status: elements.goalStatusSelect.value,
+    related_topics: splitCommaValues(elements.goalTopicsInput.value),
+  };
+  setLoading(elements.saveGoalBtn, true);
+  try {
+    await requestJson(goalId ? `/goals/${encodeURIComponent(goalId)}` : "/goals", {
+      method: goalId ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    resetGoalForm();
+    await refreshGoals();
+    await refreshLearningStatuses();
+  } catch (error) {
+    setError(error.message);
+  } finally {
+    setLoading(elements.saveGoalBtn, false);
+  }
+}
+
+function editGoal(goalId) {
+  const goal = state.goals.find((item) => item.id === goalId);
+  if (!goal) return;
+  elements.goalIdInput.value = goal.id;
+  elements.goalNameInput.value = goal.name;
+  elements.goalTypeSelect.value = goal.goal_type;
+  elements.goalDescriptionInput.value = goal.description || "";
+  elements.goalPriorityInput.value = String(goal.priority);
+  elements.goalStatusSelect.value = goal.status;
+  elements.goalTopicsInput.value = (goal.related_topics || []).join(", ");
+  elements.saveGoalBtn.textContent = "保存目标修改";
+  elements.goalNameInput.focus();
+}
+
+async function updateGoalStatus(goalId, status) {
+  try {
+    await requestJson(`/goals/${encodeURIComponent(goalId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    await refreshGoals();
+    await refreshLearningStatuses();
+  } catch (error) {
+    setError(error.message);
+  }
+}
+
+async function deleteGoal(goalId) {
+  const goal = state.goals.find((item) => item.id === goalId);
+  if (!window.confirm(`确定删除目标“${goal?.name || goalId}”吗？学习状态中的关联 ID 会同时清理。`)) return;
+  try {
+    await requestJson(`/goals/${encodeURIComponent(goalId)}`, { method: "DELETE" });
+    resetGoalForm();
+    await refreshGoals();
+    await refreshLearningStatuses();
+  } catch (error) {
+    setError(error.message);
+  }
+}
+
+function resetLearningStatusForm() {
+  elements.learningStatusForm.reset();
+  elements.learningStatusIdInput.value = "";
+  elements.learningStatusSelect.value = "not_started";
+  elements.masteryLevelInput.value = "0";
+  elements.manualImportanceInput.value = "3";
+  elements.saveLearningStatusBtn.textContent = "新增学习状态";
+  populateGoalOptions();
+}
+
+function renderLearningStatuses(records) {
+  if (!Array.isArray(records) || records.length === 0) {
+    elements.learningStatusTableBody.innerHTML = '<tr><td colspan="7" class="empty-cell">没有学习状态。</td></tr>';
+    return;
+  }
+  elements.learningStatusTableBody.innerHTML = records.map((record) => {
+    const breakdown = record.importance_breakdown || {};
+    return `
+      <tr>
+        <td><strong>${displayValue(record.topic)}</strong><br><span class="muted-text">目标数：${displayValue((record.related_goal_ids || []).length)}</span></td>
+        <td>${displayValue(learningStatusLabels[record.status] || record.status)}</td>
+        <td>${displayValue(record.mastery_level)}</td>
+        <td>${displayValue(record.manual_importance)}</td>
+        <td>
+          <strong>${formatScore(record.importance_score)}</strong>
+          <span class="importance-stars" aria-label="${displayValue(record.importance_stars)} 星">${"★".repeat(record.importance_stars || 0)}</span>
+          <details><summary>评分分量</summary>
+            <div class="breakdown-list">
+              <span>目标相关度 G：${formatScore(breakdown.goal_relevance)}</span>
+              <span>掌握缺口 D：${formatScore(breakdown.mastery_gap)}</span>
+              <span>手动重要度 M：${formatScore(breakdown.manual_importance)}</span>
+              <span>项目相关度 R：${formatScore(breakdown.project_relevance)}</span>
+            </div>
+          </details>
+        </td>
+        <td class="preview-cell">${displayValue(record.current_problem)}</td>
+        <td><div class="button-row compact">
+          <button class="secondary" type="button" data-learning-action="edit" data-status-id="${escapeText(record.id)}">编辑</button>
+          <button class="danger" type="button" data-learning-action="delete" data-status-id="${escapeText(record.id)}">删除</button>
+        </div></td>
+      </tr>
+    `;
+  }).join("");
+}
+
+async function refreshLearningStatuses() {
+  clearErrors();
+  setLoading(elements.refreshLearningStatusBtn, true);
+  try {
+    const data = await requestJson("/learning-status");
+    state.learningStatuses = Array.isArray(data?.items) ? data.items : [];
+    renderLearningStatuses(state.learningStatuses);
+  } catch (error) {
+    elements.learningStatusTableBody.innerHTML = '<tr><td colspan="7" class="empty-cell">加载学习状态失败。</td></tr>';
+    setError(error.message);
+  } finally {
+    setLoading(elements.refreshLearningStatusBtn, false);
+  }
+}
+
+async function saveLearningStatus(event) {
+  event.preventDefault();
+  clearErrors();
+  const statusId = elements.learningStatusIdInput.value;
+  const payload = {
+    topic: elements.learningTopicInput.value.trim(),
+    status: elements.learningStatusSelect.value,
+    mastery_level: Number.parseInt(elements.masteryLevelInput.value, 10),
+    manual_importance: Number.parseInt(elements.manualImportanceInput.value, 10),
+    current_problem: elements.currentProblemInput.value.trim() || null,
+    related_goal_ids: Array.from(elements.learningGoalSelect.selectedOptions).map((option) => option.value),
+    related_note_refs: splitLineValues(elements.relatedNoteRefsInput.value),
+    project_relevance: elements.projectRelevanceInput.checked,
+  };
+  setLoading(elements.saveLearningStatusBtn, true);
+  try {
+    await requestJson(statusId ? `/learning-status/${encodeURIComponent(statusId)}` : "/learning-status", {
+      method: statusId ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    resetLearningStatusForm();
+    await refreshLearningStatuses();
+  } catch (error) {
+    setError(error.message);
+  } finally {
+    setLoading(elements.saveLearningStatusBtn, false);
+  }
+}
+
+function editLearningStatus(statusId) {
+  const record = state.learningStatuses.find((item) => item.id === statusId);
+  if (!record) return;
+  elements.learningStatusIdInput.value = record.id;
+  elements.learningTopicInput.value = record.topic;
+  elements.learningStatusSelect.value = record.status;
+  elements.masteryLevelInput.value = String(record.mastery_level);
+  elements.manualImportanceInput.value = String(record.manual_importance);
+  elements.currentProblemInput.value = record.current_problem || "";
+  elements.relatedNoteRefsInput.value = (record.related_note_refs || []).join("\n");
+  elements.projectRelevanceInput.checked = Boolean(record.project_relevance);
+  populateGoalOptions(record.related_goal_ids || []);
+  elements.saveLearningStatusBtn.textContent = "保存学习状态修改";
+  elements.learningTopicInput.focus();
+}
+
+async function deleteLearningStatus(statusId) {
+  const record = state.learningStatuses.find((item) => item.id === statusId);
+  if (!window.confirm(`确定删除学习状态“${record?.topic || statusId}”吗？`)) return;
+  try {
+    await requestJson(`/learning-status/${encodeURIComponent(statusId)}`, { method: "DELETE" });
+    resetLearningStatusForm();
+    await refreshLearningStatuses();
+  } catch (error) {
+    setError(error.message);
+  }
+}
+
 elements.checkHealthBtn.addEventListener("click", checkHealth);
+elements.goalForm.addEventListener("submit", saveGoal);
+elements.cancelGoalEditBtn.addEventListener("click", resetGoalForm);
+elements.refreshGoalsBtn.addEventListener("click", refreshGoals);
+elements.learningStatusForm.addEventListener("submit", saveLearningStatus);
+elements.cancelLearningStatusEditBtn.addEventListener("click", resetLearningStatusForm);
+elements.refreshLearningStatusBtn.addEventListener("click", refreshLearningStatuses);
 elements.uploadForm.addEventListener("submit", uploadDocument);
 elements.refreshDocumentsBtn.addEventListener("click", refreshDocuments);
 elements.refreshDetailBtn.addEventListener("click", () => loadDocumentDetail(state.selectedDocumentId));
@@ -780,7 +1094,21 @@ elements.historyTableBody.addEventListener("click", (event) => {
     loadHistoryDetail(button.dataset.qaId);
   }
 });
+elements.goalsTableBody.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-goal-id]");
+  if (!button) return;
+  if (button.dataset.goalAction === "edit") editGoal(button.dataset.goalId);
+  if (button.dataset.goalAction === "status") updateGoalStatus(button.dataset.goalId, button.dataset.status);
+  if (button.dataset.goalAction === "delete") deleteGoal(button.dataset.goalId);
+});
+elements.learningStatusTableBody.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-status-id]");
+  if (!button) return;
+  if (button.dataset.learningAction === "edit") editLearningStatus(button.dataset.statusId);
+  if (button.dataset.learningAction === "delete") deleteLearningStatus(button.dataset.statusId);
+});
 
 checkHealth();
 loadAdminStatus();
 refreshHistory();
+refreshGoals().then(refreshLearningStatuses);

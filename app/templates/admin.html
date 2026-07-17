@@ -49,6 +49,150 @@
       </div>
     </section>
 
+    <section id="learningGoalsPanel" class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>学习目标</h2>
+          <p class="section-hint">目标完全由用户手动维护，不由模型或问答历史自动修改。</p>
+        </div>
+        <button id="refreshGoalsBtn" type="button">刷新目标</button>
+      </div>
+      <form id="goalForm" class="management-form">
+        <input id="goalIdInput" type="hidden">
+        <div class="form-grid">
+          <label>
+            <span class="field-label">目标名称</span>
+            <input id="goalNameInput" type="text" maxlength="200" required>
+          </label>
+          <label>
+            <span class="field-label">目标类型</span>
+            <select id="goalTypeSelect" required>
+              <option value="learning">学习目标</option>
+              <option value="job">求职目标</option>
+              <option value="project">项目目标</option>
+              <option value="skill">技能目标</option>
+            </select>
+          </label>
+          <label>
+            <span class="field-label">优先级（1～5）</span>
+            <input id="goalPriorityInput" type="number" min="1" max="5" value="3" required>
+          </label>
+          <label>
+            <span class="field-label">状态</span>
+            <select id="goalStatusSelect" required>
+              <option value="active">进行中</option>
+              <option value="paused">已暂停</option>
+              <option value="completed">已完成</option>
+            </select>
+          </label>
+          <label>
+            <span class="field-label">关联主题（逗号分隔）</span>
+            <input id="goalTopicsInput" type="text" placeholder="RAG, LangGraph">
+          </label>
+        </div>
+        <label>
+          <span class="field-label">描述</span>
+          <textarea id="goalDescriptionInput" rows="3"></textarea>
+        </label>
+        <div class="button-row form-actions">
+          <button id="saveGoalBtn" type="submit">新增目标</button>
+          <button id="cancelGoalEditBtn" class="secondary" type="button">取消编辑</button>
+        </div>
+      </form>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>名称</th>
+              <th>类型</th>
+              <th>优先级</th>
+              <th>状态</th>
+              <th>关联主题</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="goalsTableBody">
+            <tr><td colspan="6" class="empty-cell">尚未加载学习目标。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="learningStatusPanel" class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>学习状态</h2>
+          <p class="section-hint">掌握程度、当前问题和重要度只接受用户手动修改。</p>
+        </div>
+        <button id="refreshLearningStatusBtn" type="button">刷新状态</button>
+      </div>
+      <form id="learningStatusForm" class="management-form">
+        <input id="learningStatusIdInput" type="hidden">
+        <div class="form-grid">
+          <label>
+            <span class="field-label">主题</span>
+            <input id="learningTopicInput" type="text" maxlength="200" required>
+          </label>
+          <label>
+            <span class="field-label">学习状态</span>
+            <select id="learningStatusSelect" required>
+              <option value="not_started">未开始</option>
+              <option value="learning">学习中</option>
+              <option value="practicing">实践中</option>
+              <option value="mastered">已掌握</option>
+              <option value="paused">暂停</option>
+            </select>
+          </label>
+          <label>
+            <span class="field-label">掌握等级（0～5）</span>
+            <input id="masteryLevelInput" type="number" min="0" max="5" value="0" required>
+          </label>
+          <label>
+            <span class="field-label">手动重要度（1～5）</span>
+            <input id="manualImportanceInput" type="number" min="1" max="5" value="3" required>
+          </label>
+          <label>
+            <span class="field-label">关联目标（可多选）</span>
+            <select id="learningGoalSelect" multiple size="4"></select>
+          </label>
+          <label class="checkbox-label">
+            <input id="projectRelevanceInput" type="checkbox">
+            <span>与当前项目直接相关</span>
+          </label>
+        </div>
+        <label>
+          <span class="field-label">当前问题</span>
+          <textarea id="currentProblemInput" rows="3"></textarea>
+        </label>
+        <label>
+          <span class="field-label">关联笔记引用（每行一个，当前不验证存在性）</span>
+          <textarea id="relatedNoteRefsInput" rows="3" placeholder="Knowledge/RAG/Query Rewrite.md"></textarea>
+        </label>
+        <div class="button-row form-actions">
+          <button id="saveLearningStatusBtn" type="submit">新增学习状态</button>
+          <button id="cancelLearningStatusEditBtn" class="secondary" type="button">取消编辑</button>
+        </div>
+      </form>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>主题</th>
+              <th>状态</th>
+              <th>掌握等级</th>
+              <th>手动重要度</th>
+              <th>重要指数</th>
+              <th>当前问题</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="learningStatusTableBody">
+            <tr><td colspan="7" class="empty-cell">尚未加载学习状态。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <section class="panel">
       <h2>文档上传</h2>
       <form id="uploadForm" class="form-row">
