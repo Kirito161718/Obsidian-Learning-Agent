@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     rag_rewrite_short_query_length: int = 4
     rag_context_max_chars: int = 12000
     rag_max_chunks_per_source: int = 3
+    learning_session_review_max_qa: int = Field(default=20, ge=1, le=100)
 
     obsidian_enabled: bool = False
     obsidian_vault_path: Path | None = None

@@ -39,6 +39,14 @@ button {
   padding: 8px 12px;
 }
 
+.workspace-link {
+  border-radius: 6px;
+  background: var(--accent);
+  color: #ffffff;
+  padding: 8px 12px;
+  text-decoration: none;
+}
+
 button:hover:not(:disabled) {
   background: var(--accent-dark);
 }

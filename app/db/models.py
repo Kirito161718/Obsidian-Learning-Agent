@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
@@ -41,6 +41,9 @@ class QAHistory(Base):
     rewritten_query: Mapped[str] = mapped_column(Text, nullable=False)
     answer: Mapped[str] = mapped_column(Text, nullable=False)
     source_chunks: Mapped[list[dict]] = mapped_column(JSON, nullable=False)
+    session_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("learning_sessions.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
@@ -105,5 +108,43 @@ class ObsidianNote(Base):
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_scanned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_indexed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+
+class LearningSession(Base):
+    __tablename__ = "learning_sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    goal_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("learning_goals.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    learning_status_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("learning_status.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    source_types: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=lambda: ["obsidian_note", "uploaded_document"]
+    )
+    source_path_prefixes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+    last_activity_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+
+class LearningSessionReview(Base):
+    __tablename__ = "learning_session_reviews"
+    __table_args__ = (UniqueConstraint("session_id", name="uq_learning_session_reviews_session_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    session_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("learning_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    knowledge_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    covered_topics: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    unresolved_questions: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    next_steps: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    source_qa_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)

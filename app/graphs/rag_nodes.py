@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 from typing import Literal
@@ -6,12 +7,15 @@ from uuid import uuid4
 from langgraph.runtime import Runtime
 
 from app.core.config import Settings
+from app.db.models import LearningGoal, LearningSession, LearningStatus
 from app.domain.retrieved_chunk import RetrievedChunk
 from app.graphs.rag_state import RagRuntimeContext, RagState
 from app.services.context_builder import ContextBuilder
 from app.services.embedding_service import EmbeddingService
 from app.services.llm_service import DeepSeekClient
 from app.services.qa_history_service import QAHistoryService
+from app.services.crud_errors import ResourceNotFoundError
+from app.services.learning_session_service import LearningSessionService
 from app.services.rerank_service import RerankService
 from app.services.vector_service import VectorService
 
@@ -57,6 +61,11 @@ class RagNodes:
             "document_id": state.get("document_id"),
             "source_types": state.get("source_types"),
             "source_path_prefixes": state.get("source_path_prefixes"),
+            "session_id": state.get("session_id"),
+            "goal_id": state.get("goal_id"),
+            "learning_status_id": state.get("learning_status_id"),
+            "learning_context": {},
+            "qa_history_id": None,
             "top_k": int(state.get("top_k") or 5),
             "retrieval_scope": {
                 "document_id": state.get("document_id"),
@@ -82,6 +91,69 @@ class RagNodes:
             "error_code": None,
             "error_message": None,
         }
+
+    def load_explicit_learning_context(
+        self,
+        state: RagState,
+        runtime: Runtime[RagRuntimeContext],
+    ) -> RagState:
+        db = (runtime.context or {}).get("db")
+        session_id = state.get("session_id")
+        goal_id = state.get("goal_id")
+        learning_status_id = state.get("learning_status_id")
+        updates: RagState = {"learning_context": {}}
+
+        if session_id:
+            if db is None:
+                raise RuntimeError("Database session is required when session_id is provided")
+            session = db.get(LearningSession, session_id)
+            if session is None:
+                raise ResourceNotFoundError("Learning session not found")
+            updates["source_types"] = list(session.source_types or [])
+            updates["source_path_prefixes"] = list(session.source_path_prefixes or [])
+            updates["retrieval_scope"] = {
+                "document_id": state.get("document_id"),
+                "source_types": list(session.source_types or []),
+                "source_path_prefixes": list(session.source_path_prefixes or []),
+            }
+            if goal_id is None:
+                goal_id = session.goal_id
+            if learning_status_id is None:
+                learning_status_id = session.learning_status_id
+            updates["goal_id"] = goal_id
+            updates["learning_status_id"] = learning_status_id
+
+        if state.get("mode") != "ask" or (goal_id is None and learning_status_id is None):
+            return updates
+        if db is None:
+            raise RuntimeError("Database session is required for explicit learning context")
+
+        learning_context: dict[str, dict] = {}
+        if goal_id:
+            goal = db.get(LearningGoal, goal_id)
+            if goal is None:
+                raise ResourceNotFoundError("Learning goal not found")
+            learning_context["goal"] = {
+                "name": goal.name,
+                "goal_type": goal.goal_type,
+                "priority": goal.priority,
+                "related_topics": [str(item)[:80] for item in (goal.related_topics or [])[:12]],
+                "description": (goal.description or "")[:240] or None,
+            }
+        if learning_status_id:
+            learning_status = db.get(LearningStatus, learning_status_id)
+            if learning_status is None:
+                raise ResourceNotFoundError("Learning status not found")
+            learning_context["learning_status"] = {
+                "topic": learning_status.topic,
+                "status": learning_status.status,
+                "mastery_level": learning_status.mastery_level,
+                "manual_importance": learning_status.manual_importance,
+                "current_problem": (learning_status.current_problem or "")[:240] or None,
+                "project_relevance": learning_status.project_relevance,
+            }
+        updates["learning_context"] = self._bound_learning_context(learning_context)
+        return updates
 
     def retrieve_original_query(self, state: RagState) -> RagState:
         results = self._retrieve(state["original_query"], state)
@@ -234,7 +306,15 @@ class RagNodes:
         return {"answer": NO_CONTEXT_ANSWER, "context_chunks": [], "context_sources": [], "citations": []}
 
     def generate_answer(self, state: RagState) -> RagState:
-        answer = self.llm_client.generate_answer(state["question"], state["context_text"])
+        learning_context = state.get("learning_context") or {}
+        if learning_context:
+            answer = self.llm_client.generate_answer(
+                state["question"],
+                state["context_text"],
+                learning_context,
+            )
+        else:
+            answer = self.llm_client.generate_answer(state["question"], state["context_text"])
         return {"answer": answer, "model_call_count": state["model_call_count"] + 1}
 
     def validate_citations(self, state: RagState) -> RagState:
@@ -274,14 +354,29 @@ class RagNodes:
         db = (runtime.context or {}).get("db")
         if db is None:
             raise RuntimeError("Database session is required for ask mode")
-        self.history_service.save(
+        qa = self.history_service.save(
             db,
             question=state["question"],
             rewritten_query=state.get("rewritten_query") or state["original_query"],
             answer=state["answer"],
             chunks=state["context_chunks"],
+            session_id=state.get("session_id"),
         )
-        return {}
+        if state.get("session_id"):
+            LearningSessionService().record_activity(db, state["session_id"], state["question"])
+        return {"qa_history_id": qa.id}
+
+    @staticmethod
+    def _bound_learning_context(value: dict) -> dict:
+        if len(json.dumps(value, ensure_ascii=False)) <= 1200:
+            return value
+        bounded = json.loads(json.dumps(value, ensure_ascii=False))
+        if "goal" in bounded:
+            bounded["goal"]["description"] = None
+            bounded["goal"]["related_topics"] = bounded["goal"].get("related_topics", [])[:5]
+        if "learning_status" in bounded:
+            bounded["learning_status"]["current_problem"] = None
+        return bounded
 
     def _retrieve(self, query: str, state: RagState) -> list[RetrievedChunk]:
         vector = self.embedding_service.embed_query(query)

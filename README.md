@@ -3,6 +3,8 @@
 本仓库正在由企业文档 RAG 知识库演进为 Obsidian Learning Agent。
 当前原有文档上传和 RAG 功能继续保留。
 
+阶段 3 已增加独立的本地学习工作台：访问 `http://127.0.0.1:8000/learning`，可把学习 Session、显式目标与学习状态、上传文档与 Obsidian 来源、问答历史及用户主动生成的复盘组合为连续学习闭环。完整说明见 [`docs/LOCAL_LEARNING_WORKSPACE.md`](docs/LOCAL_LEARNING_WORKSPACE.md)。
+
 ## 1. 项目介绍
 
 这是一个基于 FastAPI 的企业文档 RAG 知识库问答系统 MVP，支持上传 PDF、DOCX、TXT、CSV 文档，解析后切分为 chunk，使用本地 BAAI/bge-m3 生成 embedding，写入 Qdrant 向量库，并通过 DeepSeek API 基于检索结果生成带引用来源的答案。
@@ -121,6 +123,7 @@ DELETE /learning-status/{status_id}
 | `RAG_REWRITE_SHORT_QUERY_LENGTH` | 过短问题判定长度 | `4` |
 | `RAG_CONTEXT_MAX_CHARS` | Prompt 上下文最大字符数 | `12000` |
 | `RAG_MAX_CHUNKS_PER_SOURCE` | 每个来源最多进入上下文的 Chunk 数 | `3` |
+| `LEARNING_SESSION_REVIEW_MAX_QA` | 主动生成 Session 复盘时最多读取的最近问答组数 | `20` |
 
 ## 7. 本地启动步骤
 

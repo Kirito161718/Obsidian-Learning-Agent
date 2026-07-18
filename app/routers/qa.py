@@ -108,6 +108,7 @@ def list_qa_history(
                 answer_preview=answer_preview(row.answer),
                 created_at=row.created_at,
                 source_count=len(sources),
+                session_id=row.session_id,
             )
         )
 
@@ -135,4 +136,5 @@ def get_qa_history(qa_id: str, db: Session = Depends(get_db)) -> QAHistoryDetail
         answer=history.answer,
         source_chunks=source_chunks,
         created_at=history.created_at,
+        session_id=history.session_id,
     )
