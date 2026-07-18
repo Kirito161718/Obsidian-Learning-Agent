@@ -25,7 +25,8 @@ body {
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
@@ -65,7 +66,8 @@ button:disabled {
 }
 
 input,
-textarea {
+textarea,
+select {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -74,6 +76,10 @@ textarea {
 
 textarea {
   resize: vertical;
+}
+
+select[multiple] {
+  min-height: 108px;
 }
 
 .page-shell {
@@ -111,6 +117,16 @@ textarea {
   margin-top: 16px;
 }
 
+.section-hint,
+.muted-text {
+  color: var(--muted);
+}
+
+.section-hint {
+  margin: 5px 0 0;
+  font-size: 13px;
+}
+
 .panel-header,
 .form-row {
   display: flex;
@@ -131,6 +147,29 @@ textarea {
 
 .form-row input {
   flex: 1;
+}
+
+.management-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 16px;
+}
+
+.form-actions {
+  justify-content: flex-start;
+}
+
+.checkbox-label {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  padding-top: 22px;
+}
+
+.checkbox-label input {
+  width: auto;
 }
 
 .status-grid,
@@ -355,6 +394,40 @@ code {
   border-top: 1px solid var(--border);
   margin-top: 8px;
   padding-top: 8px;
+}
+
+.importance-stars {
+  color: #d97706;
+  display: block;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+
+.breakdown-list {
+  display: grid;
+  font-size: 12px;
+  gap: 3px;
+  margin-top: 6px;
+  min-width: 170px;
+}
+
+.source-scope-fieldset {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 16px;
+}
+
+.obsidian-path {
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 .loading {

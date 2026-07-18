@@ -20,7 +20,9 @@ RAG 主链已经由 LangGraph 编排。`RagService` 作为 API 兼容门面，�
 - `expand_links_placeholder` 节点已预留，但当前只原样传递结果，不执行真实链接扩展。
 - 本阶段不使用 LangGraph Checkpointer，也不把完整 State 落盘。
 
-## 为 Obsidian Note 预留的数据结构
+阶段 1 已增加单用户学习目标、学习状态和确定性重要指数。这些数据保存在 MySQL 中，只能由用户通过 CRUD 接口或本地管理页面修改，当前不会注入 RAG Context，也不会由模型自动更新。
+
+## 已接入的 Obsidian Note 数据结构
 
 内部统一使用 `RetrievedChunk`，字段包含 `source_id`、`source_type`、`source_name`、章节、页码、Chunk 序号、文本和两类相关性分数。当前上传文档映射为：
 
@@ -30,16 +32,18 @@ source_type = uploaded_document
 source_name = filename
 ```
 
-旧 Qdrant Point 缺少 `source_type` 时会兼容映射为 `uploaded_document`；新 Point 同时写入通用来源字段与原有 API 字段。该结构允许后续将 Obsidian Note 映射为另一种 `source_type`，无需让 Graph 继续依赖裸 Qdrant Payload。
+旧 Qdrant Point 缺少 `source_type` 时会兼容映射为 `uploaded_document`；Obsidian Point 使用 `source_type=obsidian_note`，并携带 Vault 相对路径、标题路径、行号、块类型、tags 和 links。RAG Graph 拓扑不变，来源范围通过 State 传入检索节点。
+
+阶段 2 已完成显式、只读的 Vault 扫描和结构化 Markdown 增量索引。MySQL 仅保存笔记元数据与版本哈希，Qdrant 保存检索所需 chunk；Vault 不接受任何写操作。扫描、索引和单笔记重建只能由用户通过 API 或 `/admin` 主动触发。
 
 ## 当前尚未实现
 
 以下内容不属于现阶段完成范围：
 
-- 用户学习目标与目标分解。
-- 学习状态、进度和掌握度建模。
-- Obsidian Vault 扫描与增量同步。
-- Markdown 标题语义切分。
+- 自动目标分解、截止日期和父子目标。
+- 学习进度历史与自动掌握度推断。
+- 文件监听、自动扫描与后台同步。
+- 修改、移动或删除 Vault Markdown。
 - Obsidian 内部链接的真实检索和扩展。
 - Session/User Memory 与 LangGraph Checkpointer。
 - Hybrid Search、BM25、任务队列、MCP 和多智能体编排。

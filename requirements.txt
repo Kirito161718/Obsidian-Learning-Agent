@@ -15,3 +15,4 @@ docling==2.15.1
 pytest==8.3.4
 httpx==0.28.1
 langgraph==1.2.9
+PyYAML==6.0.3

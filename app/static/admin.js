@@ -2,6 +2,9 @@ const state = {
   selectedDocumentId: null,
   selectedDocumentStatus: null,
   rerankEnabled: false,
+  goals: [],
+  learningStatuses: [],
+  obsidianNotes: [],
 };
 
 const elements = {
@@ -11,6 +14,32 @@ const elements = {
   rerankModelText: document.getElementById("rerankModelText"),
   rerankTopNText: document.getElementById("rerankTopNText"),
   rerankHintText: document.getElementById("rerankHintText"),
+  goalForm: document.getElementById("goalForm"),
+  goalIdInput: document.getElementById("goalIdInput"),
+  goalNameInput: document.getElementById("goalNameInput"),
+  goalTypeSelect: document.getElementById("goalTypeSelect"),
+  goalDescriptionInput: document.getElementById("goalDescriptionInput"),
+  goalPriorityInput: document.getElementById("goalPriorityInput"),
+  goalStatusSelect: document.getElementById("goalStatusSelect"),
+  goalTopicsInput: document.getElementById("goalTopicsInput"),
+  saveGoalBtn: document.getElementById("saveGoalBtn"),
+  cancelGoalEditBtn: document.getElementById("cancelGoalEditBtn"),
+  refreshGoalsBtn: document.getElementById("refreshGoalsBtn"),
+  goalsTableBody: document.getElementById("goalsTableBody"),
+  learningStatusForm: document.getElementById("learningStatusForm"),
+  learningStatusIdInput: document.getElementById("learningStatusIdInput"),
+  learningTopicInput: document.getElementById("learningTopicInput"),
+  learningStatusSelect: document.getElementById("learningStatusSelect"),
+  masteryLevelInput: document.getElementById("masteryLevelInput"),
+  manualImportanceInput: document.getElementById("manualImportanceInput"),
+  currentProblemInput: document.getElementById("currentProblemInput"),
+  learningGoalSelect: document.getElementById("learningGoalSelect"),
+  relatedNoteRefsInput: document.getElementById("relatedNoteRefsInput"),
+  projectRelevanceInput: document.getElementById("projectRelevanceInput"),
+  saveLearningStatusBtn: document.getElementById("saveLearningStatusBtn"),
+  cancelLearningStatusEditBtn: document.getElementById("cancelLearningStatusEditBtn"),
+  refreshLearningStatusBtn: document.getElementById("refreshLearningStatusBtn"),
+  learningStatusTableBody: document.getElementById("learningStatusTableBody"),
   checkHealthBtn: document.getElementById("checkHealthBtn"),
   uploadForm: document.getElementById("uploadForm"),
   fileInput: document.getElementById("fileInput"),
@@ -26,16 +55,33 @@ const elements = {
   documentDetail: document.getElementById("documentDetail"),
   clearDocumentChunksBtn: document.getElementById("clearDocumentChunksBtn"),
   documentChunksBox: document.getElementById("documentChunksBox"),
+  obsidianStatusBox: document.getElementById("obsidianStatusBox"),
+  obsidianScanBtn: document.getElementById("obsidianScanBtn"),
+  obsidianIndexBtn: document.getElementById("obsidianIndexBtn"),
+  refreshObsidianNotesBtn: document.getElementById("refreshObsidianNotesBtn"),
+  obsidianFilterForm: document.getElementById("obsidianFilterForm"),
+  obsidianStatusFilter: document.getElementById("obsidianStatusFilter"),
+  obsidianPathFilter: document.getElementById("obsidianPathFilter"),
+  obsidianTagFilter: document.getElementById("obsidianTagFilter"),
+  obsidianOperationBox: document.getElementById("obsidianOperationBox"),
+  obsidianNotesTableBody: document.getElementById("obsidianNotesTableBody"),
+  obsidianNoteDetailBox: document.getElementById("obsidianNoteDetailBox"),
   retrieveForm: document.getElementById("retrieveForm"),
   retrieveQuestionInput: document.getElementById("retrieveQuestionInput"),
   retrieveDocumentIdInput: document.getElementById("retrieveDocumentIdInput"),
   retrieveTopKInput: document.getElementById("retrieveTopKInput"),
+  retrieveUploadedSourceInput: document.getElementById("retrieveUploadedSourceInput"),
+  retrieveObsidianSourceInput: document.getElementById("retrieveObsidianSourceInput"),
+  retrievePathPrefixesInput: document.getElementById("retrievePathPrefixesInput"),
   retrieveBtn: document.getElementById("retrieveBtn"),
   retrieveResultBox: document.getElementById("retrieveResultBox"),
   askForm: document.getElementById("askForm"),
   questionInput: document.getElementById("questionInput"),
   askDocumentIdInput: document.getElementById("askDocumentIdInput"),
   topKInput: document.getElementById("topKInput"),
+  askUploadedSourceInput: document.getElementById("askUploadedSourceInput"),
+  askObsidianSourceInput: document.getElementById("askObsidianSourceInput"),
+  askPathPrefixesInput: document.getElementById("askPathPrefixesInput"),
   askBtn: document.getElementById("askBtn"),
   answerBox: document.getElementById("answerBox"),
   sourcesList: document.getElementById("sourcesList"),
@@ -440,6 +486,9 @@ function renderRetrieveResult(data) {
         <strong>结果 ${index + 1}</strong>
         <span>chunk_id：<code>${displayValue(chunk.chunk_id)}</code></span>
         <span>document_id：<code>${displayValue(chunk.document_id)}</code></span>
+        <span>source_type：${displayValue(chunk.source_type)}</span>
+        <span>相对路径：${displayValue(chunk.source_path)}</span>
+        <span>标题路径：${displayValue((chunk.heading_path || []).join(" > "))}</span>
         <span>文件名：${displayValue(chunk.filename)}</span>
         <span>类型：${displayValue(chunk.file_type)}</span>
         <span>页码：${displayValue(chunk.page_no)}</span>
@@ -474,6 +523,18 @@ async function retrieveRag(event) {
   };
   if (documentId) {
     payload.document_id = documentId;
+  }
+  try {
+    addSourceScope(
+      payload,
+      elements.retrieveUploadedSourceInput,
+      elements.retrieveObsidianSourceInput,
+      elements.retrievePathPrefixesInput,
+      documentId,
+    );
+  } catch (error) {
+    setError(error.message);
+    return;
   }
 
   setLoading(elements.retrieveBtn, true);
@@ -570,6 +631,12 @@ function renderSources(sources) {
         <div class="source-meta">
           <strong>来源 ${index + 1}</strong>
           <span>文件名：${displayValue(source.filename)}</span>
+          <span>来源：${displayValue(source.source_type)}</span>
+          <span>相对路径：${displayValue(source.source_path)}</span>
+          <span>标题路径：${displayValue((source.heading_path || []).join(" > "))}</span>
+          <span>来源：${displayValue(source.source_type)}</span>
+          <span>相对路径：${displayValue(source.source_path)}</span>
+          <span>标题路径：${displayValue((source.heading_path || []).join(" > "))}</span>
           <span>页码：${displayValue(source.page_no)}</span>
           <span>分块：${displayValue(source.chunk_index)}</span>
           <span>分数：${displayValue(score)}</span>
@@ -718,6 +785,18 @@ async function askRag(event) {
   if (documentId) {
     payload.document_id = documentId;
   }
+  try {
+    addSourceScope(
+      payload,
+      elements.askUploadedSourceInput,
+      elements.askObsidianSourceInput,
+      elements.askPathPrefixesInput,
+      documentId,
+    );
+  } catch (error) {
+    setError(error.message);
+    return;
+  }
 
   setLoading(elements.askBtn, true);
   elements.answerBox.classList.remove("empty");
@@ -742,7 +821,452 @@ async function askRag(event) {
   }
 }
 
+const goalTypeLabels = {
+  job: "求职目标",
+  learning: "学习目标",
+  project: "项目目标",
+  skill: "技能目标",
+};
+
+const goalStatusLabels = {
+  active: "进行中",
+  paused: "已暂停",
+  completed: "已完成",
+};
+
+const learningStatusLabels = {
+  not_started: "未开始",
+  learning: "学习中",
+  practicing: "实践中",
+  mastered: "已掌握",
+  paused: "暂停",
+};
+
+function splitCommaValues(value) {
+  return String(value || "").split(/[,，]/).map((item) => item.trim()).filter(Boolean);
+}
+
+function splitLineValues(value) {
+  return String(value || "").split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+}
+
+function resetGoalForm() {
+  elements.goalForm.reset();
+  elements.goalIdInput.value = "";
+  elements.goalPriorityInput.value = "3";
+  elements.goalStatusSelect.value = "active";
+  elements.saveGoalBtn.textContent = "新增目标";
+}
+
+function populateGoalOptions(selectedIds = []) {
+  const selected = new Set(selectedIds);
+  elements.learningGoalSelect.innerHTML = state.goals.map((goal) => `
+    <option value="${escapeText(goal.id)}" ${selected.has(goal.id) ? "selected" : ""}>
+      ${displayValue(goal.name)}（优先级 ${displayValue(goal.priority)}，${displayValue(goalStatusLabels[goal.status])}）
+    </option>
+  `).join("");
+}
+
+function renderGoals(goals) {
+  if (!Array.isArray(goals) || goals.length === 0) {
+    elements.goalsTableBody.innerHTML = '<tr><td colspan="6" class="empty-cell">没有学习目标。</td></tr>';
+    return;
+  }
+  elements.goalsTableBody.innerHTML = goals.map((goal) => {
+    const transitionButtons = goal.status === "paused"
+      ? `<button type="button" data-goal-action="status" data-status="active" data-goal-id="${escapeText(goal.id)}">恢复</button>`
+      : goal.status === "completed"
+        ? `<button type="button" data-goal-action="status" data-status="active" data-goal-id="${escapeText(goal.id)}">恢复</button>`
+        : `<button class="secondary" type="button" data-goal-action="status" data-status="paused" data-goal-id="${escapeText(goal.id)}">暂停</button>
+           <button type="button" data-goal-action="status" data-status="completed" data-goal-id="${escapeText(goal.id)}">完成</button>`;
+    return `
+      <tr>
+        <td><strong>${displayValue(goal.name)}</strong><br><span class="muted-text">${displayValue(goal.description)}</span></td>
+        <td>${displayValue(goalTypeLabels[goal.goal_type] || goal.goal_type)}</td>
+        <td>${displayValue(goal.priority)}</td>
+        <td><span class="status ${statusClass(goal.status)}">${displayValue(goalStatusLabels[goal.status] || goal.status)}</span></td>
+        <td>${displayValue((goal.related_topics || []).join("、"))}</td>
+        <td><div class="button-row compact">
+          <button class="secondary" type="button" data-goal-action="edit" data-goal-id="${escapeText(goal.id)}">编辑</button>
+          ${transitionButtons}
+          <button class="danger" type="button" data-goal-action="delete" data-goal-id="${escapeText(goal.id)}">删除</button>
+        </div></td>
+      </tr>
+    `;
+  }).join("");
+}
+
+async function refreshGoals() {
+  clearErrors();
+  setLoading(elements.refreshGoalsBtn, true);
+  const selectedIds = Array.from(elements.learningGoalSelect.selectedOptions).map((option) => option.value);
+  try {
+    const data = await requestJson("/goals");
+    state.goals = Array.isArray(data?.items) ? data.items : [];
+    renderGoals(state.goals);
+    populateGoalOptions(selectedIds);
+  } catch (error) {
+    elements.goalsTableBody.innerHTML = '<tr><td colspan="6" class="empty-cell">加载学习目标失败。</td></tr>';
+    setError(error.message);
+  } finally {
+    setLoading(elements.refreshGoalsBtn, false);
+  }
+}
+
+async function saveGoal(event) {
+  event.preventDefault();
+  clearErrors();
+  const goalId = elements.goalIdInput.value;
+  const payload = {
+    name: elements.goalNameInput.value.trim(),
+    goal_type: elements.goalTypeSelect.value,
+    description: elements.goalDescriptionInput.value.trim() || null,
+    priority: Number.parseInt(elements.goalPriorityInput.value, 10),
+    status: elements.goalStatusSelect.value,
+    related_topics: splitCommaValues(elements.goalTopicsInput.value),
+  };
+  setLoading(elements.saveGoalBtn, true);
+  try {
+    await requestJson(goalId ? `/goals/${encodeURIComponent(goalId)}` : "/goals", {
+      method: goalId ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    resetGoalForm();
+    await refreshGoals();
+    await refreshLearningStatuses();
+  } catch (error) {
+    setError(error.message);
+  } finally {
+    setLoading(elements.saveGoalBtn, false);
+  }
+}
+
+function editGoal(goalId) {
+  const goal = state.goals.find((item) => item.id === goalId);
+  if (!goal) return;
+  elements.goalIdInput.value = goal.id;
+  elements.goalNameInput.value = goal.name;
+  elements.goalTypeSelect.value = goal.goal_type;
+  elements.goalDescriptionInput.value = goal.description || "";
+  elements.goalPriorityInput.value = String(goal.priority);
+  elements.goalStatusSelect.value = goal.status;
+  elements.goalTopicsInput.value = (goal.related_topics || []).join(", ");
+  elements.saveGoalBtn.textContent = "保存目标修改";
+  elements.goalNameInput.focus();
+}
+
+async function updateGoalStatus(goalId, status) {
+  try {
+    await requestJson(`/goals/${encodeURIComponent(goalId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    await refreshGoals();
+    await refreshLearningStatuses();
+  } catch (error) {
+    setError(error.message);
+  }
+}
+
+async function deleteGoal(goalId) {
+  const goal = state.goals.find((item) => item.id === goalId);
+  if (!window.confirm(`确定删除目标“${goal?.name || goalId}”吗？学习状态中的关联 ID 会同时清理。`)) return;
+  try {
+    await requestJson(`/goals/${encodeURIComponent(goalId)}`, { method: "DELETE" });
+    resetGoalForm();
+    await refreshGoals();
+    await refreshLearningStatuses();
+  } catch (error) {
+    setError(error.message);
+  }
+}
+
+function resetLearningStatusForm() {
+  elements.learningStatusForm.reset();
+  elements.learningStatusIdInput.value = "";
+  elements.learningStatusSelect.value = "not_started";
+  elements.masteryLevelInput.value = "0";
+  elements.manualImportanceInput.value = "3";
+  elements.saveLearningStatusBtn.textContent = "新增学习状态";
+  populateGoalOptions();
+}
+
+function renderLearningStatuses(records) {
+  if (!Array.isArray(records) || records.length === 0) {
+    elements.learningStatusTableBody.innerHTML = '<tr><td colspan="7" class="empty-cell">没有学习状态。</td></tr>';
+    return;
+  }
+  elements.learningStatusTableBody.innerHTML = records.map((record) => {
+    const breakdown = record.importance_breakdown || {};
+    return `
+      <tr>
+        <td><strong>${displayValue(record.topic)}</strong><br><span class="muted-text">目标数：${displayValue((record.related_goal_ids || []).length)}</span></td>
+        <td>${displayValue(learningStatusLabels[record.status] || record.status)}</td>
+        <td>${displayValue(record.mastery_level)}</td>
+        <td>${displayValue(record.manual_importance)}</td>
+        <td>
+          <strong>${formatScore(record.importance_score)}</strong>
+          <span class="importance-stars" aria-label="${displayValue(record.importance_stars)} 星">${"★".repeat(record.importance_stars || 0)}</span>
+          <details><summary>评分分量</summary>
+            <div class="breakdown-list">
+              <span>目标相关度 G：${formatScore(breakdown.goal_relevance)}</span>
+              <span>掌握缺口 D：${formatScore(breakdown.mastery_gap)}</span>
+              <span>手动重要度 M：${formatScore(breakdown.manual_importance)}</span>
+              <span>项目相关度 R：${formatScore(breakdown.project_relevance)}</span>
+            </div>
+          </details>
+        </td>
+        <td class="preview-cell">${displayValue(record.current_problem)}</td>
+        <td><div class="button-row compact">
+          <button class="secondary" type="button" data-learning-action="edit" data-status-id="${escapeText(record.id)}">编辑</button>
+          <button class="danger" type="button" data-learning-action="delete" data-status-id="${escapeText(record.id)}">删除</button>
+        </div></td>
+      </tr>
+    `;
+  }).join("");
+}
+
+async function refreshLearningStatuses() {
+  clearErrors();
+  setLoading(elements.refreshLearningStatusBtn, true);
+  try {
+    const data = await requestJson("/learning-status");
+    state.learningStatuses = Array.isArray(data?.items) ? data.items : [];
+    renderLearningStatuses(state.learningStatuses);
+  } catch (error) {
+    elements.learningStatusTableBody.innerHTML = '<tr><td colspan="7" class="empty-cell">加载学习状态失败。</td></tr>';
+    setError(error.message);
+  } finally {
+    setLoading(elements.refreshLearningStatusBtn, false);
+  }
+}
+
+async function saveLearningStatus(event) {
+  event.preventDefault();
+  clearErrors();
+  const statusId = elements.learningStatusIdInput.value;
+  const payload = {
+    topic: elements.learningTopicInput.value.trim(),
+    status: elements.learningStatusSelect.value,
+    mastery_level: Number.parseInt(elements.masteryLevelInput.value, 10),
+    manual_importance: Number.parseInt(elements.manualImportanceInput.value, 10),
+    current_problem: elements.currentProblemInput.value.trim() || null,
+    related_goal_ids: Array.from(elements.learningGoalSelect.selectedOptions).map((option) => option.value),
+    related_note_refs: splitLineValues(elements.relatedNoteRefsInput.value),
+    project_relevance: elements.projectRelevanceInput.checked,
+  };
+  setLoading(elements.saveLearningStatusBtn, true);
+  try {
+    await requestJson(statusId ? `/learning-status/${encodeURIComponent(statusId)}` : "/learning-status", {
+      method: statusId ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    resetLearningStatusForm();
+    await refreshLearningStatuses();
+  } catch (error) {
+    setError(error.message);
+  } finally {
+    setLoading(elements.saveLearningStatusBtn, false);
+  }
+}
+
+function editLearningStatus(statusId) {
+  const record = state.learningStatuses.find((item) => item.id === statusId);
+  if (!record) return;
+  elements.learningStatusIdInput.value = record.id;
+  elements.learningTopicInput.value = record.topic;
+  elements.learningStatusSelect.value = record.status;
+  elements.masteryLevelInput.value = String(record.mastery_level);
+  elements.manualImportanceInput.value = String(record.manual_importance);
+  elements.currentProblemInput.value = record.current_problem || "";
+  elements.relatedNoteRefsInput.value = (record.related_note_refs || []).join("\n");
+  elements.projectRelevanceInput.checked = Boolean(record.project_relevance);
+  populateGoalOptions(record.related_goal_ids || []);
+  elements.saveLearningStatusBtn.textContent = "保存学习状态修改";
+  elements.learningTopicInput.focus();
+}
+
+async function deleteLearningStatus(statusId) {
+  const record = state.learningStatuses.find((item) => item.id === statusId);
+  if (!window.confirm(`确定删除学习状态“${record?.topic || statusId}”吗？`)) return;
+  try {
+    await requestJson(`/learning-status/${encodeURIComponent(statusId)}`, { method: "DELETE" });
+    resetLearningStatusForm();
+    await refreshLearningStatuses();
+  } catch (error) {
+    setError(error.message);
+  }
+}
+
+function addSourceScope(payload, uploadedInput, obsidianInput, prefixesInput, documentId) {
+  if (documentId) {
+    payload.source_types = ["uploaded_document"];
+    return;
+  }
+  const sourceTypes = [];
+  if (uploadedInput.checked) sourceTypes.push("uploaded_document");
+  if (obsidianInput.checked) sourceTypes.push("obsidian_note");
+  if (sourceTypes.length === 0) throw new Error("请至少选择一种检索来源。");
+  const prefixes = splitCommaValues(prefixesInput.value).map((value) => value.replaceAll("\\", "/").replace(/^\/+|\/+$/g, ""));
+  if (prefixes.length && !obsidianInput.checked) throw new Error("相对路径前缀只适用于 Obsidian 来源。");
+  if (prefixes.some((value) => !value || value.includes("..") || /^[A-Za-z]:/.test(value))) {
+    throw new Error("Obsidian 路径前缀必须是安全的 Vault 相对路径。");
+  }
+  payload.source_types = sourceTypes;
+  if (prefixes.length) payload.source_path_prefixes = prefixes;
+}
+
+function renderObsidianOperation(data, label) {
+  const counts = data?.counts || {};
+  const items = Array.isArray(data?.items) ? data.items : [];
+  elements.obsidianOperationBox.classList.remove("empty");
+  elements.obsidianOperationBox.innerHTML = `
+    <strong>${escapeText(label)}</strong>
+    <p>新增 ${displayValue(counts.new || 0)} · 变更 ${displayValue(counts.changed || 0)} · 未变 ${displayValue(counts.unchanged || 0)} · 缺失 ${displayValue(counts.missing || 0)} · 跳过 ${displayValue(counts.skipped || 0)} · 错误 ${displayValue(counts.error || 0)}</p>
+    <details><summary>查看结果（${items.length}）</summary>
+      <div class="chunk-text">${items.map((item) => `${escapeText(item.kind)} · ${escapeText(item.relative_path)}${item.reason ? ` · ${escapeText(item.reason)}` : ""}`).join("\n") || "无记录"}</div>
+    </details>
+  `;
+}
+
+async function loadObsidianStatus() {
+  try {
+    const data = await requestJson("/obsidian/status");
+    elements.obsidianStatusBox.innerHTML = `
+      <div><span class="field-label">启用</span>${data.enabled ? "是" : "否"}</div>
+      <div><span class="field-label">Vault 可用</span>${data.available ? "是" : "否"}</div>
+      <div><span class="field-label">Vault 名称</span>${displayValue(data.vault_name)}</div>
+      <div><span class="field-label">MySQL 笔记数</span>${displayValue(data.note_count)}</div>
+      <div><span class="field-label">最近扫描</span>${displayValue(data.last_scanned_at)}</div>
+      <div><span class="field-label">最近索引</span>${displayValue(data.last_indexed_at)}</div>
+    `;
+    elements.obsidianScanBtn.disabled = !data.enabled || !data.available;
+    elements.obsidianIndexBtn.disabled = !data.enabled || !data.available;
+  } catch (error) {
+    elements.obsidianStatusBox.textContent = "Obsidian 状态加载失败。";
+    setError(error.message);
+  }
+}
+
+function renderObsidianNotes(notes) {
+  if (!Array.isArray(notes) || notes.length === 0) {
+    elements.obsidianNotesTableBody.innerHTML = '<tr><td colspan="6" class="empty-cell">没有匹配的 Obsidian 笔记。</td></tr>';
+    return;
+  }
+  elements.obsidianNotesTableBody.innerHTML = notes.map((note) => `
+    <tr>
+      <td><strong>${displayValue(note.title || note.file_name)}</strong><div class="obsidian-path">${displayValue(note.relative_path)}</div></td>
+      <td>${displayValue(note.index_status)}${note.last_error ? `<br><span class="muted-text">${displayValue(note.last_error)}</span>` : ""}</td>
+      <td>${displayValue((note.tags || []).join(", "))}</td>
+      <td>${displayValue(note.chunk_count)}</td>
+      <td>${displayValue(note.last_indexed_at)}</td>
+      <td><div class="button-row compact">
+        <button class="secondary" type="button" data-obsidian-action="detail" data-note-id="${escapeText(note.id)}">详情</button>
+        <button class="secondary" type="button" data-obsidian-action="chunks" data-note-id="${escapeText(note.id)}">Chunks</button>
+        <button type="button" data-obsidian-action="reindex" data-note-id="${escapeText(note.id)}">重新索引</button>
+      </div></td>
+    </tr>
+  `).join("");
+}
+
+async function refreshObsidianNotes(event) {
+  if (event) event.preventDefault();
+  const params = new URLSearchParams();
+  const status = elements.obsidianStatusFilter.value.trim();
+  const pathPrefix = elements.obsidianPathFilter.value.trim();
+  const tag = elements.obsidianTagFilter.value.trim();
+  if (status) params.set("status", status);
+  if (pathPrefix) params.set("path_prefix", pathPrefix);
+  if (tag) params.set("tag", tag);
+  setLoading(elements.refreshObsidianNotesBtn, true);
+  try {
+    const data = await requestJson(`/obsidian/notes${params.toString() ? `?${params}` : ""}`);
+    state.obsidianNotes = Array.isArray(data?.items) ? data.items : [];
+    renderObsidianNotes(state.obsidianNotes);
+  } catch (error) {
+    setError(error.message);
+  } finally {
+    setLoading(elements.refreshObsidianNotesBtn, false);
+  }
+}
+
+async function runObsidianOperation(kind) {
+  const button = kind === "scan" ? elements.obsidianScanBtn : elements.obsidianIndexBtn;
+  setLoading(button, true);
+  clearErrors();
+  try {
+    const endpoint = kind === "scan" ? "/obsidian/scan" : "/obsidian/index";
+    const data = await requestJson(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: kind === "index" ? "{}" : undefined });
+    renderObsidianOperation(data, kind === "scan" ? "只读扫描预览" : "增量索引完成");
+    if (kind === "index") await refreshObsidianNotes();
+    await loadObsidianStatus();
+  } catch (error) {
+    setError(error.message);
+  } finally {
+    setLoading(button, false);
+  }
+}
+
+async function loadObsidianNoteDetail(noteId) {
+  try {
+    const note = await requestJson(`/obsidian/notes/${encodeURIComponent(noteId)}`);
+    elements.obsidianNoteDetailBox.classList.remove("empty");
+    elements.obsidianNoteDetailBox.innerHTML = `
+      <h3>${displayValue(note.title || note.file_name)}</h3>
+      <p class="obsidian-path">${displayValue(note.relative_path)}</p>
+      <div class="debug-summary">
+        <div><span class="field-label">状态</span>${displayValue(note.index_status)}</div>
+        <div><span class="field-label">Chunks</span>${displayValue(note.chunk_count)}</div>
+        <div><span class="field-label">Tags</span>${displayValue((note.tags || []).join(", "))}</div>
+        <div><span class="field-label">Aliases</span>${displayValue((note.aliases || []).join(", "))}</div>
+      </div>
+      <details><summary>Frontmatter 元数据</summary><div class="chunk-text">${displayValue(JSON.stringify(note.frontmatter || {}, null, 2))}</div></details>
+      <details><summary>出站 WikiLinks</summary><div class="chunk-text">${displayValue(JSON.stringify(note.outbound_links || [], null, 2))}</div></details>
+    `;
+  } catch (error) {
+    setError(error.message);
+  }
+}
+
+async function loadObsidianChunks(noteId) {
+  try {
+    const data = await requestJson(`/obsidian/notes/${encodeURIComponent(noteId)}/chunks`);
+    const chunks = Array.isArray(data?.items) ? data.items : [];
+    elements.obsidianNoteDetailBox.classList.remove("empty");
+    elements.obsidianNoteDetailBox.innerHTML = chunks.length ? chunks.map((chunk) => `
+      <article class="chunk-card"><div class="chunk-meta">
+        <span>路径：${displayValue(chunk.source_path)}</span><span>标题：${displayValue((chunk.heading_path || []).join(" > "))}</span>
+        <span>行：${displayValue(chunk.line_start)}-${displayValue(chunk.line_end)}</span><span>类型：${displayValue((chunk.block_types || []).join(", "))}</span>
+      </div><details><summary>查看文本</summary><div class="chunk-text">${displayValue(chunk.text)}</div></details></article>
+    `).join("") : '<p class="empty">该笔记当前没有 Qdrant chunks。</p>';
+  } catch (error) {
+    setError(error.message);
+  }
+}
+
+async function reindexObsidianNote(noteId) {
+  setLoading(elements.obsidianIndexBtn, true);
+  try {
+    const data = await requestJson(`/obsidian/notes/${encodeURIComponent(noteId)}/reindex`, { method: "POST" });
+    renderObsidianOperation(data, "单笔记重新索引完成");
+    await refreshObsidianNotes();
+  } catch (error) {
+    setError(error.message);
+  } finally {
+    setLoading(elements.obsidianIndexBtn, false);
+  }
+}
+
 elements.checkHealthBtn.addEventListener("click", checkHealth);
+elements.goalForm.addEventListener("submit", saveGoal);
+elements.cancelGoalEditBtn.addEventListener("click", resetGoalForm);
+elements.refreshGoalsBtn.addEventListener("click", refreshGoals);
+elements.learningStatusForm.addEventListener("submit", saveLearningStatus);
+elements.cancelLearningStatusEditBtn.addEventListener("click", resetLearningStatusForm);
+elements.refreshLearningStatusBtn.addEventListener("click", refreshLearningStatuses);
 elements.uploadForm.addEventListener("submit", uploadDocument);
 elements.refreshDocumentsBtn.addEventListener("click", refreshDocuments);
 elements.refreshDetailBtn.addEventListener("click", () => loadDocumentDetail(state.selectedDocumentId));
@@ -751,6 +1275,10 @@ elements.reindexDetailBtn.addEventListener("click", () => reindexDocument(state.
 elements.deleteDetailBtn.addEventListener("click", () => deleteDocument(state.selectedDocumentId));
 elements.purgeDetailBtn.addEventListener("click", () => purgeDocument(state.selectedDocumentId));
 elements.clearDocumentChunksBtn.addEventListener("click", clearDocumentChunks);
+elements.obsidianScanBtn.addEventListener("click", () => runObsidianOperation("scan"));
+elements.obsidianIndexBtn.addEventListener("click", () => runObsidianOperation("index"));
+elements.refreshObsidianNotesBtn.addEventListener("click", refreshObsidianNotes);
+elements.obsidianFilterForm.addEventListener("submit", refreshObsidianNotes);
 elements.retrieveForm.addEventListener("submit", retrieveRag);
 elements.askForm.addEventListener("submit", askRag);
 elements.refreshHistoryBtn.addEventListener("click", refreshHistory);
@@ -780,7 +1308,30 @@ elements.historyTableBody.addEventListener("click", (event) => {
     loadHistoryDetail(button.dataset.qaId);
   }
 });
+elements.goalsTableBody.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-goal-id]");
+  if (!button) return;
+  if (button.dataset.goalAction === "edit") editGoal(button.dataset.goalId);
+  if (button.dataset.goalAction === "status") updateGoalStatus(button.dataset.goalId, button.dataset.status);
+  if (button.dataset.goalAction === "delete") deleteGoal(button.dataset.goalId);
+});
+elements.learningStatusTableBody.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-status-id]");
+  if (!button) return;
+  if (button.dataset.learningAction === "edit") editLearningStatus(button.dataset.statusId);
+  if (button.dataset.learningAction === "delete") deleteLearningStatus(button.dataset.statusId);
+});
+elements.obsidianNotesTableBody.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-note-id]");
+  if (!button) return;
+  if (button.dataset.obsidianAction === "detail") loadObsidianNoteDetail(button.dataset.noteId);
+  if (button.dataset.obsidianAction === "chunks") loadObsidianChunks(button.dataset.noteId);
+  if (button.dataset.obsidianAction === "reindex") reindexObsidianNote(button.dataset.noteId);
+});
 
 checkHealth();
 loadAdminStatus();
+loadObsidianStatus();
+refreshObsidianNotes();
 refreshHistory();
+refreshGoals().then(refreshLearningStatuses);

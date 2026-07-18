@@ -92,6 +92,8 @@ class RagWorkflow:
         top_k: int,
         db: Session | None = None,
         rewrite_enabled: bool | None = None,
+        source_types: list[str] | None = None,
+        source_path_prefixes: list[str] | None = None,
     ) -> RagState:
         state: RagState = {
             "mode": mode,
@@ -99,5 +101,7 @@ class RagWorkflow:
             "document_id": document_id,
             "top_k": top_k,
             "rewrite_enabled": rewrite_enabled,
+            "source_types": source_types,
+            "source_path_prefixes": source_path_prefixes,
         }
         return self.graph.invoke(state, context={"db": db})

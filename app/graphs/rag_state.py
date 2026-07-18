@@ -15,6 +15,8 @@ class RagState(TypedDict, total=False):
     rewrite_reason: str | None
     rewrite_enabled: bool | None
     document_id: str | None
+    source_types: list[str] | None
+    source_path_prefixes: list[str] | None
     top_k: int
     retrieval_scope: dict
     original_results: list[RetrievedChunk]

@@ -9,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core.config import get_settings
 from app.core.logging import setup_logging
 from app.db.database import init_db
-from app.routers import admin, documents, qa, rag
+from app.routers import admin, documents, goals, learning_status, obsidian, qa, rag
 
 setup_logging()
 settings = get_settings()
@@ -41,4 +41,7 @@ def health() -> dict[str, str]:
 app.include_router(documents.router)
 app.include_router(rag.router)
 app.include_router(qa.router)
+app.include_router(goals.router)
+app.include_router(learning_status.router)
+app.include_router(obsidian.router)
 app.include_router(admin.router)

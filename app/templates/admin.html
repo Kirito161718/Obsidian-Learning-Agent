@@ -49,6 +49,150 @@
       </div>
     </section>
 
+    <section id="learningGoalsPanel" class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>学习目标</h2>
+          <p class="section-hint">目标完全由用户手动维护，不由模型或问答历史自动修改。</p>
+        </div>
+        <button id="refreshGoalsBtn" type="button">刷新目标</button>
+      </div>
+      <form id="goalForm" class="management-form">
+        <input id="goalIdInput" type="hidden">
+        <div class="form-grid">
+          <label>
+            <span class="field-label">目标名称</span>
+            <input id="goalNameInput" type="text" maxlength="200" required>
+          </label>
+          <label>
+            <span class="field-label">目标类型</span>
+            <select id="goalTypeSelect" required>
+              <option value="learning">学习目标</option>
+              <option value="job">求职目标</option>
+              <option value="project">项目目标</option>
+              <option value="skill">技能目标</option>
+            </select>
+          </label>
+          <label>
+            <span class="field-label">优先级（1～5）</span>
+            <input id="goalPriorityInput" type="number" min="1" max="5" value="3" required>
+          </label>
+          <label>
+            <span class="field-label">状态</span>
+            <select id="goalStatusSelect" required>
+              <option value="active">进行中</option>
+              <option value="paused">已暂停</option>
+              <option value="completed">已完成</option>
+            </select>
+          </label>
+          <label>
+            <span class="field-label">关联主题（逗号分隔）</span>
+            <input id="goalTopicsInput" type="text" placeholder="RAG, LangGraph">
+          </label>
+        </div>
+        <label>
+          <span class="field-label">描述</span>
+          <textarea id="goalDescriptionInput" rows="3"></textarea>
+        </label>
+        <div class="button-row form-actions">
+          <button id="saveGoalBtn" type="submit">新增目标</button>
+          <button id="cancelGoalEditBtn" class="secondary" type="button">取消编辑</button>
+        </div>
+      </form>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>名称</th>
+              <th>类型</th>
+              <th>优先级</th>
+              <th>状态</th>
+              <th>关联主题</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="goalsTableBody">
+            <tr><td colspan="6" class="empty-cell">尚未加载学习目标。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="learningStatusPanel" class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>学习状态</h2>
+          <p class="section-hint">掌握程度、当前问题和重要度只接受用户手动修改。</p>
+        </div>
+        <button id="refreshLearningStatusBtn" type="button">刷新状态</button>
+      </div>
+      <form id="learningStatusForm" class="management-form">
+        <input id="learningStatusIdInput" type="hidden">
+        <div class="form-grid">
+          <label>
+            <span class="field-label">主题</span>
+            <input id="learningTopicInput" type="text" maxlength="200" required>
+          </label>
+          <label>
+            <span class="field-label">学习状态</span>
+            <select id="learningStatusSelect" required>
+              <option value="not_started">未开始</option>
+              <option value="learning">学习中</option>
+              <option value="practicing">实践中</option>
+              <option value="mastered">已掌握</option>
+              <option value="paused">暂停</option>
+            </select>
+          </label>
+          <label>
+            <span class="field-label">掌握等级（0～5）</span>
+            <input id="masteryLevelInput" type="number" min="0" max="5" value="0" required>
+          </label>
+          <label>
+            <span class="field-label">手动重要度（1～5）</span>
+            <input id="manualImportanceInput" type="number" min="1" max="5" value="3" required>
+          </label>
+          <label>
+            <span class="field-label">关联目标（可多选）</span>
+            <select id="learningGoalSelect" multiple size="4"></select>
+          </label>
+          <label class="checkbox-label">
+            <input id="projectRelevanceInput" type="checkbox">
+            <span>与当前项目直接相关</span>
+          </label>
+        </div>
+        <label>
+          <span class="field-label">当前问题</span>
+          <textarea id="currentProblemInput" rows="3"></textarea>
+        </label>
+        <label>
+          <span class="field-label">关联笔记引用（每行一个，当前不验证存在性）</span>
+          <textarea id="relatedNoteRefsInput" rows="3" placeholder="Knowledge/RAG/Query Rewrite.md"></textarea>
+        </label>
+        <div class="button-row form-actions">
+          <button id="saveLearningStatusBtn" type="submit">新增学习状态</button>
+          <button id="cancelLearningStatusEditBtn" class="secondary" type="button">取消编辑</button>
+        </div>
+      </form>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>主题</th>
+              <th>状态</th>
+              <th>掌握等级</th>
+              <th>手动重要度</th>
+              <th>重要指数</th>
+              <th>当前问题</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="learningStatusTableBody">
+            <tr><td colspan="7" class="empty-cell">尚未加载学习状态。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <section class="panel">
       <h2>文档上传</h2>
       <form id="uploadForm" class="form-row">
@@ -107,6 +251,36 @@
       <div id="documentChunksBox" class="chunk-debug-box empty">请选择文档后点击“查看 chunks”。</div>
     </section>
 
+    <section id="obsidianPanel" class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Obsidian Vault（只读）</h2>
+          <p class="muted-text">扫描和索引只读取 Markdown；页面不提供修改、移动或删除 Vault 文件的操作。</p>
+        </div>
+        <div class="button-row">
+          <button id="obsidianScanBtn" class="secondary" type="button">预览扫描</button>
+          <button id="obsidianIndexBtn" type="button">执行增量索引</button>
+          <button id="refreshObsidianNotesBtn" class="secondary" type="button">刷新笔记</button>
+        </div>
+      </div>
+      <div id="obsidianStatusBox" class="status-grid"><div>尚未加载 Obsidian 状态。</div></div>
+      <form id="obsidianFilterForm" class="history-filter-form">
+        <div class="form-grid">
+          <label><span class="field-label">索引状态</span><input id="obsidianStatusFilter" type="text" placeholder="例如 indexed / error / missing"></label>
+          <label><span class="field-label">相对路径前缀</span><input id="obsidianPathFilter" type="text" placeholder="例如 Knowledge/RAG"></label>
+          <label><span class="field-label">标签</span><input id="obsidianTagFilter" type="text" placeholder="例如 rag"></label>
+        </div>
+      </form>
+      <div id="obsidianOperationBox" class="result-box empty">尚未执行扫描或索引。</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>标题 / 相对路径</th><th>状态</th><th>Tags</th><th>Chunks</th><th>最近索引</th><th>操作</th></tr></thead>
+          <tbody id="obsidianNotesTableBody"><tr><td colspan="6" class="empty-cell">尚未加载 Obsidian 笔记。</td></tr></tbody>
+        </table>
+      </div>
+      <div id="obsidianNoteDetailBox" class="history-detail-box empty">请选择笔记查看结构化元数据或 Qdrant chunks。</div>
+    </section>
+
     <section class="panel">
       <h2>RAG 检索调试</h2>
       <form id="retrieveForm" class="ask-form">
@@ -122,6 +296,15 @@
           <label>
             <span class="field-label">返回数量 Top K</span>
             <input id="retrieveTopKInput" type="number" min="1" max="20" value="5">
+          </label>
+          <fieldset class="source-scope-fieldset">
+            <legend class="field-label">来源范围</legend>
+            <label class="inline-check"><input id="retrieveUploadedSourceInput" type="checkbox" checked> 上传文档</label>
+            <label class="inline-check"><input id="retrieveObsidianSourceInput" type="checkbox" checked> Obsidian</label>
+          </fieldset>
+          <label>
+            <span class="field-label">Obsidian 相对路径前缀（可选，逗号分隔）</span>
+            <input id="retrievePathPrefixesInput" type="text" placeholder="Knowledge/RAG, Projects">
           </label>
         </div>
         <button id="retrieveBtn" type="submit">执行检索</button>
@@ -144,6 +327,15 @@
           <label>
             <span class="field-label">召回数量 Top K</span>
             <input id="topKInput" type="number" min="1" max="20" value="5">
+          </label>
+          <fieldset class="source-scope-fieldset">
+            <legend class="field-label">来源范围</legend>
+            <label class="inline-check"><input id="askUploadedSourceInput" type="checkbox" checked> 上传文档</label>
+            <label class="inline-check"><input id="askObsidianSourceInput" type="checkbox" checked> Obsidian</label>
+          </fieldset>
+          <label>
+            <span class="field-label">Obsidian 相对路径前缀（可选，逗号分隔）</span>
+            <input id="askPathPrefixesInput" type="text" placeholder="Knowledge/RAG, Projects">
           </label>
         </div>
         <button id="askBtn" type="submit">提问</button>
