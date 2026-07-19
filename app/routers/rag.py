@@ -1,4 +1,5 @@
 from functools import lru_cache
+import inspect
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -56,7 +57,8 @@ def retrieve(request: RetrieveRequest, db: Session = Depends(get_db)) -> Retriev
     )
     try:
         service = get_rag_service()
-        return service.retrieve(request, db) if request.session_id else service.retrieve(request)
+        parameters = inspect.signature(service.retrieve).parameters
+        return service.retrieve(request, db) if "db" in parameters else service.retrieve(request)
     except LLMServiceUnavailable as exc:
         logger.warning("Query rewrite unavailable during RAG retrieve, fallback should have been applied: %s", str(exc)[:300])
         raise HTTPException(status_code=503, detail=LLM_UNAVAILABLE_DETAIL) from exc

@@ -4,7 +4,7 @@
 
 `GET /learning` 提供独立的本地学习工作台。学习 Session 将显式选择的目标、学习状态、来源类型和 Obsidian 相对路径范围，与后续问答历史关联起来。页面默认按 `last_activity_at desc` 显示最近 10 个活动 Session；更早的数据不会自动删除，可通过 API 分页查看。
 
-本阶段不实现自动 Memory、自动 Reflection、自动状态更新、定时任务或 Vault 写回。问答、检索和复盘都不会自动修改目标状态、掌握等级或 Markdown 文件。
+Session 现在可以显式关闭 `memory_enabled`。启用时只加载当前 Session 最近若干轮问答用于代词消歧；它不是知识来源，也不会产生引用。系统仍不实现自动 Lessons Memory、自动 Reflection、自动状态更新、定时任务或 Vault 写回。问答、检索和复盘都不会自动修改目标状态、掌握等级、用户偏好或 Markdown 文件。
 
 ## 显式学习上下文
 
@@ -18,6 +18,8 @@ Session 可保存三种范围：全部来源、仅上传文档、仅 Obsidian。
 
 - “问答”调用 `/rag/ask`，生成答案并写入 `qa_history`，同时保存 `session_id`、更新最后活动时间。
 - “仅检索”调用 `/rag/retrieve`，可复用 Session 来源范围，但不生成答案、不写历史，也不需要把学习上下文送入模型。
+
+Ask 与 Retrieve 都返回 `run_id` 和只包含统计信息的 `context_manifest`。学习工作台显示本次 Session Memory 轮数、Context 是否截断和 Run ID；完整运行指标可在 `/agent` 查看。
 
 ## 引用与 Obsidian
 
@@ -47,3 +49,5 @@ GET  /learning/sessions/{session_id}/review
 复盘最多使用 `LEARNING_SESSION_REVIEW_MAX_QA`（默认 20）组最近问答，并只向模型提供问题、答案、来源名称与标题层级、无答案标记，以及当前显式目标和状态。它不包含完整 Chunk、完整 Prompt、绝对路径或完整 State。
 
 输出由 Pydantic 验证为知识总结、已覆盖主题、待解决问题和下一步行动。每个 Session 只有一份当前复盘，再次生成执行更新；复盘只保存到 MySQL，不进入 Qdrant，不产生 Markdown，也不修改学习状态。
+
+主动 Review 会创建 `run_type=session_review` 的紧凑运行记录，记录 QA 数、模型调用数、状态和耗时，但不保存 Review Prompt。普通运行记录和 Tool Audit 默认保留 10 天，只能在 Agent 控制台手动 Dry Run 后清理。

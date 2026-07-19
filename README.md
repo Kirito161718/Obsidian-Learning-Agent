@@ -5,6 +5,8 @@
 
 阶段 3 已增加独立的本地学习工作台：访问 `http://127.0.0.1:8000/learning`，可把学习 Session、显式目标与学习状态、上传文档与 Obsidian 来源、问答历史及用户主动生成的复盘组合为连续学习闭环。完整说明见 [`docs/LOCAL_LEARNING_WORKSPACE.md`](docs/LOCAL_LEARNING_WORKSPACE.md)。
 
+阶段 4 已增加 Session Memory、用户手动偏好、统一 Context Bundle、RAG/Review Run History、只读 Tool Registry 与脱敏工具审计。访问 `http://127.0.0.1:8000/agent` 可使用 Agent 控制台；完整边界见 [`docs/MEMORY_CONTEXT_TOOL_FOUNDATION.md`](docs/MEMORY_CONTEXT_TOOL_FOUNDATION.md)。当前没有 MCP、模型自主工具调用、自动 Lessons Memory 或后台清理。
+
 ## 1. 项目介绍
 
 这是一个基于 FastAPI 的企业文档 RAG 知识库问答系统 MVP，支持上传 PDF、DOCX、TXT、CSV 文档，解析后切分为 chunk，使用本地 BAAI/bge-m3 生成 embedding，写入 Qdrant 向量库，并通过 DeepSeek API 基于检索结果生成带引用来源的答案。
@@ -124,6 +126,13 @@ DELETE /learning-status/{status_id}
 | `RAG_CONTEXT_MAX_CHARS` | Prompt 上下文最大字符数 | `12000` |
 | `RAG_MAX_CHUNKS_PER_SOURCE` | 每个来源最多进入上下文的 Chunk 数 | `3` |
 | `LEARNING_SESSION_REVIEW_MAX_QA` | 主动生成 Session 复盘时最多读取的最近问答组数 | `20` |
+| `SESSION_MEMORY_ENABLED` | 全局启用当前 Session 最近问答记忆 | `true` |
+| `SESSION_MEMORY_MAX_TURNS` | Session Memory 最大轮数 | `6` |
+| `SESSION_MEMORY_MAX_CHARS` | Session Memory 总字符预算 | `3000` |
+| `RAG_TOTAL_PROMPT_MAX_CHARS` | 动态 Context Bundle 总字符预算 | `18000` |
+| `RUN_HISTORY_RETENTION_DAYS` | 手动清理使用的默认保留天数 | `10` |
+| `TOOL_DEFAULT_TIMEOUT_SECONDS` | 内部 Tool 默认 Timeout | `15` |
+| `ENABLED_INTERNAL_TOOLS` | 明确启用的只读内部 Tool 名称 | 六个内置工具 |
 
 ## 7. 本地启动步骤
 

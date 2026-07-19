@@ -109,6 +109,7 @@ def list_qa_history(
                 created_at=row.created_at,
                 source_count=len(sources),
                 session_id=row.session_id,
+                run_id=row.run_id,
             )
         )
 
@@ -137,4 +138,5 @@ def get_qa_history(qa_id: str, db: Session = Depends(get_db)) -> QAHistoryDetail
         source_chunks=source_chunks,
         created_at=history.created_at,
         session_id=history.session_id,
+        run_id=history.run_id,
     )

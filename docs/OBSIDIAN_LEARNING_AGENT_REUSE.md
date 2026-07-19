@@ -1,6 +1,6 @@
 # Obsidian Learning Agent 演进与复用说明
 
-> 阶段 3 已实现本地学习工作台、Learning Session、显式学习上下文、Session 问答关联和用户主动触发的学习复盘。使用与边界见 [`LOCAL_LEARNING_WORKSPACE.md`](LOCAL_LEARNING_WORKSPACE.md)。这些能力不包含自动 Memory、自动状态修改或 Vault 写回。
+> 阶段 3 已实现本地学习工作台、Learning Session、显式学习上下文、Session 问答关联和用户主动触发的学习复盘。阶段 4 已增加受限 Session Memory、手动用户偏好、Context Bundle、运行历史、只读 Tool Registry 与工具审计。使用与边界见 [`LOCAL_LEARNING_WORKSPACE.md`](LOCAL_LEARNING_WORKSPACE.md) 和 [`MEMORY_CONTEXT_TOOL_FOUNDATION.md`](MEMORY_CONTEXT_TOOL_FOUNDATION.md)。
 
 ## 当前定位
 
@@ -21,6 +21,8 @@ RAG 主链已经由 LangGraph 编排。`RagService` 作为 API 兼容门面，�
 - Ask/Retrieve 两条路径：Retrieve 不生成答案、不写问答历史；Ask 执行可回答性判断、答案生成、引用验证和精简历史保存。
 - `expand_links_placeholder` 节点已预留，但当前只原样传递结果，不执行真实链接扩展。
 - 本阶段不使用 LangGraph Checkpointer，也不把完整 State 落盘。
+- Ask 与 Retrieve 创建紧凑 Run History；Session Memory 只来自当前 Session 最近问答，且不会成为引用来源。
+- 用户偏好只能手动修改，Tool 风险只由代码注册表确定；当前模型不会自主调用工具。
 
 阶段 1 已增加单用户学习目标、学习状态和确定性重要指数。这些数据保存在 MySQL 中，只能由用户通过 CRUD 接口或本地管理页面修改，当前不会注入 RAG Context，也不会由模型自动更新。
 
@@ -47,7 +49,7 @@ source_name = filename
 - 文件监听、自动扫描与后台同步。
 - 修改、移动或删除 Vault Markdown。
 - Obsidian 内部链接的真实检索和扩展。
-- Session/User Memory 与 LangGraph Checkpointer。
+- 自动 Lessons Memory、自动 Reflection 与 LangGraph 持久化 Checkpointer。
 - Hybrid Search、BM25、任务队列、MCP 和多智能体编排。
 
 旧项目背景、已有 HTTP 契约和历史部署说明仍保留在 `RAG_PROJECT_HANDOFF.md`，但若其中的独立服务复用建议与本文冲突，以本文为准。

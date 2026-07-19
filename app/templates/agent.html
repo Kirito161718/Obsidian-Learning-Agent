@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent 控制台</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='agent.css') }}">
+</head>
+<body>
+  <main class="page-shell">
+    <header class="page-header">
+      <div><h1>Agent 控制台</h1><p>手动管理偏好、预览上下文预算、查看运行历史和测试只读内部工具。</p></div>
+      <nav><a href="/learning">学习工作台</a><a href="/admin">调试后台</a></nav>
+    </header>
+    <div id="agentMessage" class="message" hidden></div>
+
+    <section class="panel" id="preferencesPanel">
+      <div class="panel-header"><div><h2>用户偏好</h2><p>只在点击保存后修改；聊天不会自动更新。</p></div></div>
+      <form id="preferencesForm" class="form-grid">
+        <label>回答语言<select id="preferredLanguage"><option value="auto">自动</option><option value="zh-CN">简体中文</option><option value="en">English</option></select></label>
+        <label>回答深度<select id="answerDepth"><option value="concise">简洁</option><option value="standard">标准</option><option value="detailed">详细</option></select></label>
+        <label>输出风格<select id="answerStyle"><option value="structured">结构化</option><option value="plain">纯文本</option></select></label>
+        <label>引用模式<select id="citationMode"><option value="required">必须引用（有可靠资料时）</option><option value="when_available">有资料时引用</option></select></label>
+        <label class="wide">自定义说明（最多 1000 字）<textarea id="customInstructions" maxlength="1000" rows="3"></textarea></label>
+        <div class="wide"><button type="submit">保存偏好</button></div>
+      </form>
+    </section>
+
+    <section class="panel" id="contextPreviewPanel">
+      <div class="panel-header"><div><h2>Context Preview</h2><p>仅显示摘要、字符数和截断状态，不显示完整 Prompt。</p></div><button id="previewContextBtn" type="button">预览上下文</button></div>
+      <div class="form-grid">
+        <label>Session<select id="previewSession"><option value="">不选择</option></select></label>
+        <label>目标<select id="previewGoal"><option value="">不选择</option></select></label>
+        <label>学习状态<select id="previewStatus"><option value="">不选择</option></select></label>
+      </div>
+      <pre id="contextPreviewOutput" class="output">尚未预览。</pre>
+    </section>
+
+    <section class="panel" id="runHistoryPanel">
+      <div class="panel-header"><div><h2>Run History</h2><p>紧凑指标，不保存完整 Prompt、回答或知识上下文。</p></div><button id="refreshRunsBtn" type="button">刷新</button></div>
+      <div class="table-wrap"><table><thead><tr><th>Run</th><th>类型</th><th>状态</th><th>Session</th><th>Rewrite</th><th>召回/来源</th><th>模型/工具</th><th>耗时</th><th>错误</th><th>时间</th></tr></thead><tbody id="runsBody"></tbody></table></div>
+    </section>
+
+    <section class="panel" id="toolRegistryPanel">
+      <div class="panel-header"><div><h2>Tool Registry</h2><p>风险等级由代码注册表确定，客户端不能覆盖。</p></div><button id="refreshToolsBtn" type="button">刷新</button></div>
+      <div class="table-wrap"><table><thead><tr><th>工具</th><th>描述</th><th>风险</th><th>启用</th><th>幂等</th><th>Caller</th></tr></thead><tbody id="toolsBody"></tbody></table></div>
+      <form id="toolTestForm" class="tool-test"><label>只读 Tool<select id="toolName"></select></label><label>输入 JSON<textarea id="toolInput" rows="4">{}</textarea></label><button type="submit">手动执行</button></form>
+      <pre id="toolOutput" class="output">尚未执行。</pre>
+    </section>
+
+    <section class="panel" id="toolAuditPanel">
+      <div class="panel-header"><div><h2>Tool Audit</h2><p>输入输出只显示脱敏、截断后的摘要。</p></div><button id="refreshAuditsBtn" type="button">刷新</button></div>
+      <div class="table-wrap"><table><thead><tr><th>工具</th><th>风险</th><th>决策</th><th>状态</th><th>输入 Hash</th><th>脱敏摘要</th><th>耗时</th><th>错误</th></tr></thead><tbody id="auditsBody"></tbody></table></div>
+    </section>
+
+    <section class="panel" id="cleanupPanel">
+      <div class="panel-header"><div><h2>历史清理</h2><p>普通 Run 与 Tool Audit 默认保留 10 天；这里只提供手动清理。</p></div></div>
+      <div class="cleanup-row"><label>早于天数<input id="cleanupDays" type="number" min="1" value="10"></label><button id="cleanupPreviewBtn" type="button">预览清理</button><button id="cleanupApplyBtn" class="danger" type="button" disabled>确认清理</button></div>
+      <pre id="cleanupOutput" class="output">必须先 Dry Run。</pre>
+    </section>
+  </main>
+  <script src="{{ url_for('static', path='agent.js') }}"></script>
+</body>
+</html>

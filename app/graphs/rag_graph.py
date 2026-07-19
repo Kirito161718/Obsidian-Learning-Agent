@@ -36,7 +36,9 @@ class RagWorkflow:
         )
         builder = StateGraph(RagState, context_schema=RagRuntimeContext)
         builder.add_node("initialize_state", nodes.initialize_state)
+        builder.add_node("load_user_preferences", nodes.load_user_preferences)
         builder.add_node("load_explicit_learning_context", nodes.load_explicit_learning_context)
+        builder.add_node("load_session_memory", nodes.load_session_memory)
         builder.add_node("retrieve_original_query", nodes.retrieve_original_query)
         builder.add_node("assess_retrieval_quality", nodes.assess_retrieval_quality)
         builder.add_node("rewrite_query", nodes.rewrite_query)
@@ -54,8 +56,10 @@ class RagWorkflow:
         builder.add_node("save_qa_history", nodes.save_qa_history)
 
         builder.add_edge(START, "initialize_state")
-        builder.add_edge("initialize_state", "load_explicit_learning_context")
-        builder.add_edge("load_explicit_learning_context", "retrieve_original_query")
+        builder.add_edge("initialize_state", "load_user_preferences")
+        builder.add_edge("load_user_preferences", "load_explicit_learning_context")
+        builder.add_edge("load_explicit_learning_context", "load_session_memory")
+        builder.add_edge("load_session_memory", "retrieve_original_query")
         builder.add_edge("retrieve_original_query", "assess_retrieval_quality")
         builder.add_conditional_edges(
             "assess_retrieval_quality",
@@ -99,6 +103,7 @@ class RagWorkflow:
         session_id: str | None = None,
         goal_id: str | None = None,
         learning_status_id: str | None = None,
+        run_id: str | None = None,
     ) -> RagState:
         state: RagState = {
             "mode": mode,
@@ -111,5 +116,6 @@ class RagWorkflow:
             "session_id": session_id,
             "goal_id": goal_id,
             "learning_status_id": learning_status_id,
+            "run_id": run_id,
         }
         return self.graph.invoke(state, context={"db": db})

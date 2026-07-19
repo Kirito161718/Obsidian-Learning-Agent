@@ -1,3 +1,5 @@
+import logging
+
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -14,7 +16,10 @@ from app.schemas.rag import (
 from app.services.embedding_service import EmbeddingService
 from app.services.llm_service import DeepSeekClient
 from app.services.rerank_service import RerankService
+from app.services.run_history_service import RunHistoryService
 from app.services.vector_service import VectorService
+
+logger = logging.getLogger(__name__)
 
 
 class RagService:
@@ -29,6 +34,7 @@ class RagService:
         self.vector_service = vector_service
         self.rerank_service = rerank_service
         self.llm_client = llm_client
+        self.run_history = RunHistoryService()
         self.workflow = RagWorkflow(
             settings=get_settings(),
             embedding_service=embedding_service,
@@ -50,18 +56,25 @@ class RagService:
         return rewritten or normalized
 
     def ask(self, request: AskRequest, db: Session) -> AskResponse:
-        state = self.workflow.invoke(
-            mode="ask",
-            question=request.question,
-            document_id=request.document_id,
-            top_k=request.top_k,
-            source_types=request.source_types,
-            source_path_prefixes=request.source_path_prefixes,
-            session_id=request.session_id,
-            goal_id=request.goal_id,
-            learning_status_id=request.learning_status_id,
-            db=db,
-        )
+        run_id = self._create_run(db, "rag_ask", request)
+        try:
+            state = self.workflow.invoke(
+                mode="ask",
+                question=request.question,
+                document_id=request.document_id,
+                top_k=request.top_k,
+                source_types=request.source_types,
+                source_path_prefixes=request.source_path_prefixes,
+                session_id=request.session_id,
+                goal_id=request.goal_id,
+                learning_status_id=request.learning_status_id,
+                run_id=run_id,
+                db=db,
+            )
+        except Exception as exc:
+            self.run_history.safe_fail(db, run_id, exc)
+            raise
+        self.run_history.safe_succeed(db, run_id, state=state)
         sources = [self._to_source_chunk(chunk) for chunk in state.get("context_chunks", [])]
         return AskResponse(
             answer=state.get("answer") or NO_CONTEXT_ANSWER,
@@ -69,6 +82,8 @@ class RagService:
             session_id=request.session_id,
             qa_history_id=state.get("qa_history_id"),
             learning_context_applied=bool(state.get("learning_context")),
+            run_id=run_id,
+            context_manifest=state.get("context_manifest") or {},
         )
 
     def retrieve_context(
@@ -93,18 +108,27 @@ class RagService:
         return (chunks, query) if return_query else chunks
 
     def retrieve(self, request: AskRequest, db: Session | None = None) -> RetrieveResponse:
-        state = self.workflow.invoke(
-            mode="retrieve",
-            question=request.question,
-            document_id=request.document_id,
-            top_k=request.top_k,
-            source_types=request.source_types,
-            source_path_prefixes=request.source_path_prefixes,
-            session_id=request.session_id,
-            goal_id=request.goal_id,
-            learning_status_id=request.learning_status_id,
-            db=db,
-        )
+        run_id = self._create_run(db, "rag_retrieve", request) if db is not None else None
+        try:
+            state = self.workflow.invoke(
+                mode="retrieve",
+                question=request.question,
+                document_id=request.document_id,
+                top_k=request.top_k,
+                source_types=request.source_types,
+                source_path_prefixes=request.source_path_prefixes,
+                session_id=request.session_id,
+                goal_id=request.goal_id,
+                learning_status_id=request.learning_status_id,
+                run_id=run_id,
+                db=db,
+            )
+        except Exception as exc:
+            if db is not None:
+                self.run_history.safe_fail(db, run_id, exc)
+            raise
+        if db is not None:
+            self.run_history.safe_succeed(db, run_id, state=state)
         chunks = [self._to_retrieved_chunk(chunk) for chunk in state.get("context_chunks", [])]
         return RetrieveResponse(
             question=request.question,
@@ -116,7 +140,25 @@ class RagService:
             retrieved_count=len(chunks),
             chunks=chunks,
             session_id=request.session_id,
+            run_id=run_id,
+            context_manifest=state.get("context_manifest") or {},
         )
+
+    def _create_run(self, db: Session, run_type: str, request: AskRequest) -> str | None:
+        try:
+            run = self.run_history.create(
+                db,
+                run_type=run_type,
+                question=request.question,
+                session_id=request.session_id,
+                mode="ask" if run_type == "rag_ask" else "retrieve",
+                source_types=list(request.source_types or []),
+                source_path_prefixes=list(request.source_path_prefixes or []),
+            )
+            return run.id
+        except Exception as exc:
+            logger.warning("Agent run creation failed: error_type=%s", type(exc).__name__)
+            return None
 
     def _to_source_chunk(self, chunk: RetrievedChunk) -> SourceChunk:
         return SourceChunk(

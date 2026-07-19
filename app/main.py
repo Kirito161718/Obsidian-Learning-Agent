@@ -9,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core.config import get_settings
 from app.core.logging import setup_logging
 from app.db.database import init_db
-from app.routers import admin, documents, goals, learning, learning_status, obsidian, qa, rag
+from app.routers import admin, agent, documents, goals, learning, learning_status, obsidian, qa, rag
 
 setup_logging()
 settings = get_settings()
@@ -46,3 +46,4 @@ app.include_router(learning_status.router)
 app.include_router(obsidian.router)
 app.include_router(learning.router)
 app.include_router(admin.router)
+app.include_router(agent.router)
