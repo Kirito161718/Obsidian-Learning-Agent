@@ -6,7 +6,7 @@ from app.domain.retrieved_chunk import RetrievedChunk
 
 
 class RagState(TypedDict, total=False):
-    run_id: str
+    run_id: str | None
     mode: str
     question: str
     original_query: str
@@ -21,6 +21,10 @@ class RagState(TypedDict, total=False):
     goal_id: str | None
     learning_status_id: str | None
     learning_context: dict
+    user_preferences: dict
+    session_memory: list[dict]
+    session_memory_truncated: bool
+    context_manifest: dict
     qa_history_id: str | None
     top_k: int
     retrieval_scope: dict

@@ -12,7 +12,7 @@ const el = Object.fromEntries([
   "errorBanner", "refreshSessionsBtn", "newSessionForm", "newSessionTitle", "sessionList",
   "currentSessionTitle", "rewriteStatus", "renameSessionBtn", "archiveSessionBtn", "messageList",
   "questionForm", "questionInput", "questionMode", "submitQuestionBtn", "sessionSettingsForm",
-  "goalSelect", "learningStatusSelect", "sourceScopeSelect", "sourcePrefixInput", "saveSessionSettingsBtn",
+  "goalSelect", "learningStatusSelect", "sourceScopeSelect", "sourcePrefixInput", "memoryEnabled", "saveSessionSettingsBtn",
   "learningStatusForm", "manualStatus", "masteryLevel", "manualImportance", "currentProblem",
   "projectRelevance", "importanceDisplay", "saveLearningStatusBtn", "sourceCards", "linkNotesBtn",
   "generateReviewBtn", "reviewBox"
@@ -109,6 +109,7 @@ async function selectSession(sessionId) {
   el.learningStatusSelect.value = session.learning_status_id || "";
   el.sourceScopeSelect.value = scopeForSourceTypes(session.source_types || []);
   el.sourcePrefixInput.value = (session.source_path_prefixes || []).join(", ");
+  el.memoryEnabled.checked = session.memory_enabled !== false;
   [el.submitQuestionBtn, el.renameSessionBtn, el.archiveSessionBtn, el.saveSessionSettingsBtn, el.generateReviewBtn]
     .forEach((button) => { button.disabled = false; });
   renderSelectedLearningStatus();
@@ -165,7 +166,8 @@ async function saveSessionSettings(event) {
         goal_id: el.goalSelect.value || null,
         learning_status_id: el.learningStatusSelect.value || null,
         source_types: sourceTypes,
-        source_path_prefixes: prefixes
+        source_path_prefixes: prefixes,
+        memory_enabled: el.memoryEnabled.checked
       })
     });
     renderSelectedLearningStatus();
@@ -208,14 +210,15 @@ async function submitQuestion(event) {
       method: "POST", body: JSON.stringify({ question, session_id: state.currentSession.id })
     });
     if (mode === "ask") {
-      el.rewriteStatus.textContent = response.learning_context_applied
-        ? "已应用显式学习上下文；它不作为可引用资料。"
-        : "未选择显式目标或学习状态。";
+      const memoryTurns = response.context_manifest?.session_memory?.turns || 0;
+      const truncated = Object.values(response.context_manifest || {}).some((item) => item && item.truncated === true);
+      el.rewriteStatus.textContent = `Run ${response.run_id || "-"} · 用户偏好已加载 · Session Memory ${memoryTurns} 轮 · Context ${truncated ? "已截断" : "未截断"}`;
       el.questionInput.value = "";
       await loadMessages();
       await loadSessions(state.currentSession.id);
     } else {
-      el.rewriteStatus.textContent = `仅检索完成 · Rewrite ${response.rewrite_applied ? "已触发" : "未触发"} · ${response.rewrite_reason || "-"}`;
+      const memoryTurns = response.context_manifest?.session_memory?.turns || 0;
+      el.rewriteStatus.textContent = `仅检索完成 · Run ${response.run_id || "-"} · Memory ${memoryTurns} 轮 · Rewrite ${response.rewrite_applied ? "已触发" : "未触发"} · ${response.rewrite_reason || "-"}`;
       state.currentSources = response.chunks || [];
       renderSources(state.currentSources);
       el.messageList.insertAdjacentHTML("beforeend", `<article class="message user"><div class="message-label">仅检索</div><div class="message-body">${escapeHtml(question)}</div></article><article class="message assistant"><div class="message-body">检索到 ${state.currentSources.length} 个 Chunk；未生成答案，也未写问答历史。</div></article>`);

@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
@@ -43,6 +43,9 @@ class QAHistory(Base):
     source_chunks: Mapped[list[dict]] = mapped_column(JSON, nullable=False)
     session_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("learning_sessions.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    run_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("agent_runs.id", ondelete="SET NULL"), nullable=True, index=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
@@ -127,6 +130,7 @@ class LearningSession(Base):
         JSON, nullable=False, default=lambda: ["obsidian_note", "uploaded_document"]
     )
     source_path_prefixes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    memory_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
@@ -148,3 +152,69 @@ class LearningSessionReview(Base):
     source_qa_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+
+class UserPreference(Base):
+    __tablename__ = "user_preferences"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="default")
+    preferred_language: Mapped[str] = mapped_column(String(20), nullable=False, default="zh-CN")
+    answer_depth: Mapped[str] = mapped_column(String(20), nullable=False, default="standard")
+    answer_style: Mapped[str] = mapped_column(String(20), nullable=False, default="structured")
+    citation_mode: Mapped[str] = mapped_column(String(30), nullable=False, default="required")
+    custom_instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+
+class AgentRun(Base):
+    __tablename__ = "agent_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    run_type: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    session_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("learning_sessions.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="running", index=True)
+    question_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    question_preview: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    mode: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    source_types: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    source_path_prefixes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    rewrite_applied: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    retrieved_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    source_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    model_call_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tool_call_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    context_manifest: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    error_message_preview: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+
+class ToolExecution(Base):
+    __tablename__ = "tool_executions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    run_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    tool_name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    risk_level: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+    caller_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    decision: Mapped[str] = mapped_column(String(30), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", index=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    input_summary: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    output_summary: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    error_message_preview: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)

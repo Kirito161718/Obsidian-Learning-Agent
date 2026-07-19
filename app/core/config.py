@@ -48,6 +48,26 @@ class Settings(BaseSettings):
     rag_max_chunks_per_source: int = 3
     learning_session_review_max_qa: int = Field(default=20, ge=1, le=100)
 
+    session_memory_enabled: bool = True
+    session_memory_max_turns: int = Field(default=6, ge=1, le=50)
+    session_memory_max_chars: int = Field(default=3000, ge=100, le=20000)
+    session_memory_answer_preview_chars: int = Field(default=500, ge=20, le=5000)
+    user_preferences_max_chars: int = Field(default=1000, ge=1, le=10000)
+    explicit_learning_context_max_chars: int = Field(default=1200, ge=100, le=10000)
+    rag_total_prompt_max_chars: int = Field(default=18000, ge=1000, le=100000)
+
+    run_history_retention_days: int = Field(default=10, ge=1, le=3650)
+    run_question_preview_chars: int = Field(default=200, ge=20, le=2000)
+    run_error_preview_chars: int = Field(default=500, ge=20, le=5000)
+
+    tool_default_timeout_seconds: int = Field(default=15, ge=1, le=300)
+    tool_audit_input_max_chars: int = Field(default=1000, ge=50, le=10000)
+    tool_audit_output_max_chars: int = Field(default=1000, ge=50, le=10000)
+    enabled_internal_tools: str = (
+        "list_learning_goals,list_learning_status,search_obsidian_notes,"
+        "get_session_messages,get_user_preferences,retrieve_knowledge"
+    )
+
     obsidian_enabled: bool = False
     obsidian_vault_path: Path | None = None
     obsidian_include_patterns: str = "*.md,**/*.md"
@@ -139,6 +159,10 @@ class Settings(BaseSettings):
     @property
     def obsidian_exclude_path_list(self) -> tuple[str, ...]:
         return tuple(value.replace("\\", "/").strip("/") for value in self._csv_values(self.obsidian_exclude_paths))
+
+    @property
+    def enabled_internal_tool_list(self) -> tuple[str, ...]:
+        return self._csv_values(self.enabled_internal_tools)
 
     @staticmethod
     def _csv_values(value: str) -> tuple[str, ...]:

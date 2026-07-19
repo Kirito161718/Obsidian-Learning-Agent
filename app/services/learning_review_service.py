@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import UTC, datetime
 
 from pydantic import ValidationError
@@ -11,6 +12,9 @@ from app.schemas.learning import LearningReviewContent
 from app.services.crud_errors import ResourceNotFoundError, ServiceDatabaseError
 from app.services.learning_session_service import LearningSessionService
 from app.services.llm_service import DeepSeekClient
+from app.services.run_history_service import RunHistoryService
+
+logger = logging.getLogger(__name__)
 
 
 class EmptyLearningSessionError(ValueError):
@@ -25,6 +29,7 @@ class LearningReviewService:
     def __init__(self, llm_client: DeepSeekClient | None = None) -> None:
         self.llm_client = llm_client
         self.session_service = LearningSessionService()
+        self.run_history = RunHistoryService()
 
     def get(self, db: Session, session_id: str) -> LearningSessionReview:
         self.session_service.get(db, session_id)
@@ -42,10 +47,33 @@ class LearningReviewService:
 
     def generate(self, db: Session, session_id: str) -> LearningSessionReview:
         session = self.session_service.get(db, session_id)
+        run_id: str | None = None
+        try:
+            run_id = self.run_history.create(
+                db,
+                run_type="session_review",
+                session_id=session_id,
+                mode="review",
+            ).id
+        except Exception as exc:
+            logger.warning("Session review run creation failed: error_type=%s", type(exc).__name__)
+        try:
+            review, qa_count = self._generate_review(db, session)
+        except Exception as exc:
+            self.run_history.safe_fail(db, run_id, exc)
+            raise
+        self.run_history.safe_succeed(
+            db,
+            run_id,
+            state={"retrieved_count": qa_count, "model_call_count": 1},
+        )
+        return review
+
+    def _generate_review(self, db: Session, session) -> tuple[LearningSessionReview, int]:
         limit = get_settings().learning_session_review_max_qa
         rows = (
             db.query(QAHistory)
-            .filter(QAHistory.session_id == session_id)
+            .filter(QAHistory.session_id == session.id)
             .order_by(QAHistory.created_at.desc())
             .limit(limit)
             .all()
@@ -68,14 +96,14 @@ class LearningReviewService:
 
         review = (
             db.query(LearningSessionReview)
-            .filter(LearningSessionReview.session_id == session_id)
+            .filter(LearningSessionReview.session_id == session.id)
             .one_or_none()
         )
         values = content.model_dump(mode="json")
         now = datetime.now(UTC)
         if review is None:
             review = LearningSessionReview(
-                session_id=session_id,
+                session_id=session.id,
                 source_qa_ids=[row.id for row in rows],
                 **values,
             )
@@ -91,7 +119,7 @@ class LearningReviewService:
         except SQLAlchemyError as exc:
             db.rollback()
             raise ServiceDatabaseError("Failed to save learning session review") from exc
-        return review
+        return review, len(rows)
 
     @staticmethod
     def _goal_context(db: Session, goal_id: str | None) -> dict | None:

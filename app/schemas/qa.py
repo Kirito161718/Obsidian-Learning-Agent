@@ -31,6 +31,7 @@ class QAHistoryItem(BaseModel):
     created_at: datetime
     source_count: int
     session_id: str | None = None
+    run_id: str | None = None
 
 
 class QAHistoryListResponse(BaseModel):
@@ -48,3 +49,4 @@ class QAHistoryDetailResponse(BaseModel):
     source_chunks: list[QAHistorySourceChunk]
     created_at: datetime
     session_id: str | None = None
+    run_id: str | None = None

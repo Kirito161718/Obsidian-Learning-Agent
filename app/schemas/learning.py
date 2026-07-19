@@ -40,6 +40,7 @@ class LearningSessionCreate(BaseModel):
         default_factory=lambda: [LearningSourceType.obsidian_note, LearningSourceType.uploaded_document]
     )
     source_path_prefixes: list[str] = Field(default_factory=list)
+    memory_enabled: bool = True
 
     @field_validator("title")
     @classmethod
@@ -74,6 +75,7 @@ class LearningSessionUpdate(BaseModel):
     learning_status_id: str | None = None
     source_types: list[LearningSourceType] | None = None
     source_path_prefixes: list[str] | None = None
+    memory_enabled: bool | None = None
 
     @field_validator("title")
     @classmethod
@@ -107,6 +109,8 @@ class LearningSessionUpdate(BaseModel):
             raise ValueError("source_types must not be null")
         if "source_path_prefixes" in self.model_fields_set and self.source_path_prefixes is None:
             raise ValueError("source_path_prefixes must not be null")
+        if "memory_enabled" in self.model_fields_set and self.memory_enabled is None:
+            raise ValueError("memory_enabled must not be null")
         if self.source_path_prefixes and self.source_types is not None:
             if LearningSourceType.obsidian_note not in self.source_types:
                 raise ValueError("source_path_prefixes require obsidian_note source type")
@@ -122,6 +126,7 @@ class LearningSessionOut(BaseModel):
     learning_status_id: str | None
     source_types: list[LearningSourceType]
     source_path_prefixes: list[str]
+    memory_enabled: bool
     status: LearningSessionStatus
     created_at: datetime
     updated_at: datetime

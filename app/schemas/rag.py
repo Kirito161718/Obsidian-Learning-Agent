@@ -74,6 +74,8 @@ class AskResponse(BaseModel):
     session_id: str | None = None
     qa_history_id: str | None = None
     learning_context_applied: bool = False
+    run_id: str | None = None
+    context_manifest: dict = Field(default_factory=dict)
 
 
 class RetrieveRequest(AskRequest):
@@ -111,3 +113,5 @@ class RetrieveResponse(BaseModel):
     retrieved_count: int
     chunks: list[RetrievedChunk]
     session_id: str | None = None
+    run_id: str | None = None
+    context_manifest: dict = Field(default_factory=dict)

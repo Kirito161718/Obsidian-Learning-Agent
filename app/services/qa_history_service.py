@@ -20,6 +20,7 @@ class QAHistoryService:
         answer: str,
         chunks: list[RetrievedChunk],
         session_id: str | None = None,
+        run_id: str | None = None,
     ) -> QAHistory:
         compact_sources = [self._compact_chunk(chunk) for chunk in chunks]
         try:
@@ -29,6 +30,7 @@ class QAHistoryService:
                 answer=answer,
                 source_chunks=compact_sources,
                 session_id=session_id,
+                run_id=run_id,
             )
             db.add(qa)
             db.commit()
