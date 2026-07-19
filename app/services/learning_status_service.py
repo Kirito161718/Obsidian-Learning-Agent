@@ -1,7 +1,7 @@
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.db.models import LearningGoal, LearningStatus, utc_now
+from app.db.models import LearningGoal, LearningSession, LearningStatus, utc_now
 from app.schemas.learning_status import LearningStatusCreate, LearningStatusUpdate, LearningStatusValue
 from app.services.crud_errors import InvalidReferenceError, ResourceNotFoundError, ServiceDatabaseError
 
@@ -69,6 +69,10 @@ class LearningStatusService:
     def delete(self, db: Session, status_id: str) -> None:
         learning_status = self.get(db, status_id)
         try:
+            db.query(LearningSession).filter(LearningSession.learning_status_id == status_id).update(
+                {LearningSession.learning_status_id: None, LearningSession.updated_at: utc_now()},
+                synchronize_session=False,
+            )
             db.delete(learning_status)
             db.commit()
         except SQLAlchemyError as exc:

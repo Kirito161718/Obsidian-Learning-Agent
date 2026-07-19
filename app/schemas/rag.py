@@ -9,6 +9,9 @@ class AskRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=20)
     source_types: list[Literal["uploaded_document", "obsidian_note"]] | None = None
     source_path_prefixes: list[str] | None = None
+    session_id: str | None = None
+    goal_id: str | None = None
+    learning_status_id: str | None = None
 
     @field_validator("question")
     @classmethod
@@ -68,6 +71,9 @@ class SourceChunk(BaseModel):
 class AskResponse(BaseModel):
     answer: str
     sources: list[SourceChunk]
+    session_id: str | None = None
+    qa_history_id: str | None = None
+    learning_context_applied: bool = False
 
 
 class RetrieveRequest(AskRequest):
@@ -104,3 +110,4 @@ class RetrieveResponse(BaseModel):
     top_k: int
     retrieved_count: int
     chunks: list[RetrievedChunk]
+    session_id: str | None = None

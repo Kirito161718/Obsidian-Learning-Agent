@@ -17,6 +17,11 @@ class RagState(TypedDict, total=False):
     document_id: str | None
     source_types: list[str] | None
     source_path_prefixes: list[str] | None
+    session_id: str | None
+    goal_id: str | None
+    learning_status_id: str | None
+    learning_context: dict
+    qa_history_id: str | None
     top_k: int
     retrieval_scope: dict
     original_results: list[RetrievedChunk]

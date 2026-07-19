@@ -1,7 +1,7 @@
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.db.models import LearningGoal, LearningStatus, utc_now
+from app.db.models import LearningGoal, LearningSession, LearningStatus, utc_now
 from app.schemas.goal import GoalStatus, GoalType, LearningGoalCreate, LearningGoalUpdate
 from app.services.crud_errors import ResourceNotFoundError, ServiceDatabaseError
 
@@ -59,6 +59,10 @@ class GoalService:
                         related_id for related_id in learning_status.related_goal_ids if related_id != goal_id
                     ]
                     learning_status.updated_at = utc_now()
+            db.query(LearningSession).filter(LearningSession.goal_id == goal_id).update(
+                {LearningSession.goal_id: None, LearningSession.updated_at: utc_now()},
+                synchronize_session=False,
+            )
             db.delete(goal)
             db.commit()
         except SQLAlchemyError as exc:

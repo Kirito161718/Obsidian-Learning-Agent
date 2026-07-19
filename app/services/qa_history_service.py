@@ -19,7 +19,8 @@ class QAHistoryService:
         rewritten_query: str,
         answer: str,
         chunks: list[RetrievedChunk],
-    ) -> None:
+        session_id: str | None = None,
+    ) -> QAHistory:
         compact_sources = [self._compact_chunk(chunk) for chunk in chunks]
         try:
             qa = QAHistory(
@@ -27,10 +28,13 @@ class QAHistoryService:
                 rewritten_query=rewritten_query,
                 answer=answer,
                 source_chunks=compact_sources,
+                session_id=session_id,
             )
             db.add(qa)
             db.commit()
+            db.refresh(qa)
             logger.info("QA history saved: qa_id=%s, source_count=%s", qa.id, len(compact_sources))
+            return qa
         except SQLAlchemyError:
             db.rollback()
             logger.exception("Failed to save QA history")

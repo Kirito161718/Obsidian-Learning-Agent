@@ -30,6 +30,7 @@ class QAHistoryItem(BaseModel):
     answer_preview: str
     created_at: datetime
     source_count: int
+    session_id: str | None = None
 
 
 class QAHistoryListResponse(BaseModel):
@@ -46,3 +47,4 @@ class QAHistoryDetailResponse(BaseModel):
     answer: str
     source_chunks: list[QAHistorySourceChunk]
     created_at: datetime
+    session_id: str | None = None

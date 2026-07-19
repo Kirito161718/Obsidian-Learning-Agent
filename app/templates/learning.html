@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>本地学习工作台</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='learning.css') }}">
+</head>
+<body data-obsidian-vault-name="{{ obsidian_vault_name }}">
+  <header class="workspace-header">
+    <div>
+      <h1>本地学习工作台</h1>
+      <p>显式选择目标与状态，围绕本地资料持续学习。系统不会自动修改学习状态或 Vault。</p>
+    </div>
+    <a class="button secondary" href="/admin">返回调试后台</a>
+  </header>
+  <div id="errorBanner" class="error-banner" hidden></div>
+
+  <main class="workspace-grid">
+    <aside class="column sessions-column">
+      <div class="column-header">
+        <h2>学习会话</h2>
+        <button id="refreshSessionsBtn" class="secondary" type="button">刷新</button>
+      </div>
+      <form id="newSessionForm" class="stack compact-form">
+        <label>新会话标题<input id="newSessionTitle" maxlength="200" placeholder="新学习会话" value="新学习会话"></label>
+        <button type="submit">新建会话</button>
+      </form>
+      <p class="hint">默认显示最近 10 个活动会话，不会删除更早的数据。</p>
+      <div id="sessionList" class="session-list"><p class="empty">正在加载...</p></div>
+    </aside>
+
+    <section class="column qa-column">
+      <div class="column-header">
+        <div>
+          <h2 id="currentSessionTitle">请选择或新建会话</h2>
+          <p id="rewriteStatus" class="hint">刷新页面后会恢复上次选择的会话。</p>
+        </div>
+        <div class="button-row">
+          <button id="renameSessionBtn" class="secondary" type="button" disabled>修改标题</button>
+          <button id="archiveSessionBtn" class="danger" type="button" disabled>归档</button>
+        </div>
+      </div>
+      <div id="messageList" class="message-list"><p class="empty">尚未选择会话。</p></div>
+      <form id="questionForm" class="question-form">
+        <label for="questionInput">输入问题</label>
+        <textarea id="questionInput" rows="4" required placeholder="例如：Query Rewrite 在当前项目中如何触发？"></textarea>
+        <div class="question-actions">
+          <label>操作模式
+            <select id="questionMode">
+              <option value="ask">问答</option>
+              <option value="retrieve">仅检索</option>
+            </select>
+          </label>
+          <button id="submitQuestionBtn" type="submit" disabled>发送</button>
+        </div>
+      </form>
+    </section>
+
+    <aside class="column context-column">
+      <h2>学习上下文与来源</h2>
+      <form id="sessionSettingsForm" class="stack">
+        <label>当前目标<select id="goalSelect"><option value="">不关联目标</option></select></label>
+        <label>当前学习状态<select id="learningStatusSelect"><option value="">不关联学习状态</option></select></label>
+        <label>来源范围
+          <select id="sourceScopeSelect">
+            <option value="all">全部来源</option>
+            <option value="uploaded_document">仅上传文档</option>
+            <option value="obsidian_note">仅 Obsidian</option>
+          </select>
+        </label>
+        <label>Obsidian 相对路径前缀<input id="sourcePrefixInput" placeholder="Knowledge/RAG"></label>
+        <button id="saveSessionSettingsBtn" type="submit" disabled>保存会话设置</button>
+      </form>
+
+      <section class="context-section">
+        <h3>手动更新学习状态</h3>
+        <p class="hint">只有点击下方按钮才会调用 PATCH /learning-status/{id}。</p>
+        <form id="learningStatusForm" class="stack">
+          <label>状态
+            <select id="manualStatus">
+              <option value="not_started">未开始</option><option value="learning">学习中</option>
+              <option value="practicing">练习中</option><option value="mastered">已掌握</option><option value="paused">暂停</option>
+            </select>
+          </label>
+          <label>掌握等级（0～5）<input id="masteryLevel" type="number" min="0" max="5"></label>
+          <label>手动重要度（1～5）<input id="manualImportance" type="number" min="1" max="5"></label>
+          <label>当前问题<textarea id="currentProblem" rows="2"></textarea></label>
+          <label class="inline-check"><input id="projectRelevance" type="checkbox"> 与当前项目相关</label>
+          <div id="importanceDisplay" class="hint">重要指数：-</div>
+          <button id="saveLearningStatusBtn" type="submit" disabled>保存学习状态</button>
+        </form>
+      </section>
+
+      <section class="context-section">
+        <div class="column-header"><h3>本次 Sources</h3><button id="linkNotesBtn" class="secondary" type="button" disabled>将本次引用笔记关联到当前学习状态</button></div>
+        <div id="sourceCards" class="source-cards"><p class="empty">完成问答或检索后显示 Source Card。</p></div>
+      </section>
+
+      <section class="context-section review-section">
+        <div class="column-header"><h3>学习复盘</h3><button id="generateReviewBtn" type="button" disabled>生成本次学习复盘</button></div>
+        <p class="hint">复盘只在你主动点击时生成；再次生成会更新当前复盘。</p>
+        <div id="reviewBox" class="review-box"><p class="empty">暂无复盘。</p></div>
+      </section>
+    </aside>
+  </main>
+  <script src="{{ url_for('static', path='learning.js') }}"></script>
+</body>
+</html>

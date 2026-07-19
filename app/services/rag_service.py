@@ -57,10 +57,19 @@ class RagService:
             top_k=request.top_k,
             source_types=request.source_types,
             source_path_prefixes=request.source_path_prefixes,
+            session_id=request.session_id,
+            goal_id=request.goal_id,
+            learning_status_id=request.learning_status_id,
             db=db,
         )
         sources = [self._to_source_chunk(chunk) for chunk in state.get("context_chunks", [])]
-        return AskResponse(answer=state.get("answer") or NO_CONTEXT_ANSWER, sources=sources)
+        return AskResponse(
+            answer=state.get("answer") or NO_CONTEXT_ANSWER,
+            sources=sources,
+            session_id=request.session_id,
+            qa_history_id=state.get("qa_history_id"),
+            learning_context_applied=bool(state.get("learning_context")),
+        )
 
     def retrieve_context(
         self,
@@ -83,7 +92,7 @@ class RagService:
         query = state.get("rewritten_query") or state.get("original_query") or question.strip()
         return (chunks, query) if return_query else chunks
 
-    def retrieve(self, request: AskRequest) -> RetrieveResponse:
+    def retrieve(self, request: AskRequest, db: Session | None = None) -> RetrieveResponse:
         state = self.workflow.invoke(
             mode="retrieve",
             question=request.question,
@@ -91,6 +100,10 @@ class RagService:
             top_k=request.top_k,
             source_types=request.source_types,
             source_path_prefixes=request.source_path_prefixes,
+            session_id=request.session_id,
+            goal_id=request.goal_id,
+            learning_status_id=request.learning_status_id,
+            db=db,
         )
         chunks = [self._to_retrieved_chunk(chunk) for chunk in state.get("context_chunks", [])]
         return RetrieveResponse(
@@ -102,6 +115,7 @@ class RagService:
             top_k=request.top_k,
             retrieved_count=len(chunks),
             chunks=chunks,
+            session_id=request.session_id,
         )
 
     def _to_source_chunk(self, chunk: RetrievedChunk) -> SourceChunk:

@@ -1,5 +1,7 @@
 # Obsidian Learning Agent 演进与复用说明
 
+> 阶段 3 已实现本地学习工作台、Learning Session、显式学习上下文、Session 问答关联和用户主动触发的学习复盘。使用与边界见 [`LOCAL_LEARNING_WORKSPACE.md`](LOCAL_LEARNING_WORKSPACE.md)。这些能力不包含自动 Memory、自动状态修改或 Vault 写回。
+
 ## 当前定位
 
 本仓库已从独立企业文档 RAG 项目直接演进为 Obsidian Learning Agent 的代码基线。后续能力在同一仓库内继续建设，不再把这里作为一个需要由另一套后端通过 HTTP 调用的独立 RAG 服务。

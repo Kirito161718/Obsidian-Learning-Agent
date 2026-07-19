@@ -33,3 +33,14 @@ def test_database_url_round_trips_special_password_characters():
     rendered = settings.database_url.render_as_string(hide_password=False)
 
     assert make_url(rendered).password == password
+
+
+def test_stage3_migration_has_expected_revision_and_objects():
+    source = Path("alembic/versions/20260718_0004_add_learning_sessions.py").read_text(encoding="utf-8")
+    assert 'revision = "20260718_0004"' in source
+    assert 'down_revision = "20260717_0003"' in source
+    assert '"learning_sessions"' in source
+    assert '"learning_session_reviews"' in source
+    assert 'op.add_column("qa_history"' in source
+    assert 'ondelete="SET NULL"' in source
+    assert 'uq_learning_session_reviews_session_id' in source
