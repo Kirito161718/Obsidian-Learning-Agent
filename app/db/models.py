@@ -204,6 +204,10 @@ class ToolExecution(Base):
         String(36), ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=True, index=True
     )
     tool_name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    tool_source: Mapped[str] = mapped_column(String(20), nullable=False, default="internal", index=True)
+    provider_name: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    remote_tool_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    protocol_request_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     risk_level: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     caller_type: Mapped[str] = mapped_column(String(20), nullable=False)
     decision: Mapped[str] = mapped_column(String(30), nullable=False)

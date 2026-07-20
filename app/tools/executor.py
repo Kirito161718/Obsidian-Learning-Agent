@@ -16,6 +16,7 @@ from app.tools.registry import ToolRegistry, get_tool_registry
 class ToolExecutionContext:
     db: Session
     services: dict[str, Any] = field(default_factory=dict)
+    audit_record: Any | None = None
 
 
 class ToolExecutionError(RuntimeError):
@@ -50,6 +51,7 @@ class ToolExecutor:
     ) -> tuple[dict, Any]:
         definition = self.registry.get(tool_name)
         if definition is None:
+            source, provider, remote = self._unknown_tool_metadata(tool_name)
             audit = self.audit.create(
                 db,
                 tool_name=tool_name,
@@ -61,6 +63,9 @@ class ToolExecutor:
                 idempotency_key=idempotency_key,
                 run_id=run_id,
                 error_code="tool_not_registered",
+                tool_source=source,
+                provider_name=provider,
+                remote_tool_name=remote,
             )
             raise ToolExecutionError(
                 "tool_not_registered", "Tool is not registered", execution_id=audit.id
@@ -80,6 +85,9 @@ class ToolExecutor:
                 idempotency_key=idempotency_key,
                 run_id=run_id,
                 error_code="input_validation_failed",
+                tool_source=definition.tool_source,
+                provider_name=definition.provider_name,
+                remote_tool_name=definition.remote_tool_name,
             )
             raise ToolExecutionError(
                 "input_validation_failed", "Tool input validation failed", execution_id=audit.id
@@ -98,6 +106,9 @@ class ToolExecutor:
             idempotency_key=idempotency_key,
             run_id=run_id,
             error_code=decision.error_code,
+            tool_source=definition.tool_source,
+            provider_name=definition.provider_name,
+            remote_tool_name=definition.remote_tool_name,
         )
         if decision.decision != "allowed":
             raise ToolExecutionError(
@@ -108,15 +119,19 @@ class ToolExecutor:
             )
 
         self.audit.mark_running(db, audit)
-        context = ToolExecutionContext(db=db, services=services or {})
+        context = ToolExecutionContext(db=db, services=services or {}, audit_record=audit)
         try:
             output = await asyncio.wait_for(
                 self._invoke(definition.callable, parsed_input, context),
                 timeout=definition.timeout_seconds,
             )
         except TimeoutError as exc:
-            self.audit.fail(db, audit, error_code="tool_timeout", error="Tool execution timed out")
-            raise ToolExecutionError("tool_timeout", "Tool execution timed out", execution_id=audit.id) from exc
+            code = "mcp_timeout" if definition.tool_source == "mcp" else "tool_timeout"
+            self.audit.fail(db, audit, error_code=code, error="Tool execution timed out")
+            raise ToolExecutionError(code, "Tool execution timed out", execution_id=audit.id) from exc
+        except ToolExecutionError as exc:
+            self.audit.fail(db, audit, error_code=exc.code, error=str(exc))
+            raise ToolExecutionError(exc.code, str(exc), execution_id=audit.id, decision=exc.decision) from exc
         except Exception as exc:
             self.audit.fail(db, audit, error_code="tool_execution_failed", error=type(exc).__name__)
             raise ToolExecutionError(
@@ -139,3 +154,10 @@ class ToolExecutor:
         if inspect.iscoroutinefunction(callable_obj):
             return await callable_obj(parsed_input, context)
         return await asyncio.to_thread(callable_obj, parsed_input, context)
+
+    @staticmethod
+    def _unknown_tool_metadata(tool_name: str) -> tuple[str, str | None, str | None]:
+        parts = tool_name.split(".", 2)
+        if len(parts) == 3 and parts[0] == "mcp":
+            return "mcp", parts[1][:100], parts[2][:100]
+        return "internal", None, None

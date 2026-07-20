@@ -138,4 +138,4 @@ POST      /agent/maintenance/cleanup-history
 
 `GET /agent` 提供 Jinja2 + 原生 JavaScript 的 Agent 控制台。页面可显式保存偏好、预览 Context 统计、查看 Run 与 Tool Audit、手动测试只读 Tool，并要求先 Dry Run 后确认清理。`/admin` 和 `/learning` 都提供入口。
 
-当前没有 MCP Server/Client，没有把工具暴露为 MCP Tool，没有模型自主 Function Calling，没有 Planner/Executor 多智能体，也没有 Human-in-the-loop 审批工作流。
+阶段 5 已在本基础之上增加只读 MCP Server/Client。允许的 MCP Tool 仍复用本章的 Registry、Policy、Executor、Audit 和脱敏语义；审计额外区分 `tool_source=internal|mcp`、Provider、Remote Tool 与安全协议关联 ID。完整协议、Allowlist、stdio 生命周期和控制台说明见 [`READ_ONLY_MCP_INTEGRATION.md`](READ_ONLY_MCP_INTEGRATION.md)。当前仍没有模型自主 Function Calling、Planner/Executor 多智能体或 Human-in-the-loop 审批工作流。

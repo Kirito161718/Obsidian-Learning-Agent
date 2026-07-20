@@ -16,6 +16,7 @@ mysql_data/
 .coverage
 htmlcov/
 runtime/*
+config/mcp_servers.local.yaml
 reports/*
 model_cache/
 models/

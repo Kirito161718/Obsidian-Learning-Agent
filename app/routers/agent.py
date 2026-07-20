@@ -201,7 +201,16 @@ async def execute_tool(
             idempotency_key=payload.idempotency_key,
         )
     except ToolExecutionError as exc:
-        status_code = 404 if exc.code == "tool_not_registered" else 422 if "validation" in exc.code else 409 if exc.decision == "approval_required" else 403
+        if exc.code == "tool_not_registered":
+            status_code = 404
+        elif exc.code in {"input_validation_failed", "output_validation_failed", "mcp_input_invalid", "mcp_schema_invalid"}:
+            status_code = 422
+        elif exc.code in {"mcp_server_not_connected", "mcp_tool_not_allowed"} or exc.decision == "approval_required":
+            status_code = 409
+        elif exc.code in {"mcp_timeout", "mcp_protocol_error", "mcp_server_error", "mcp_connection_failed"}:
+            status_code = 503
+        else:
+            status_code = 403
         raise HTTPException(
             status_code=status_code,
             detail={
@@ -222,6 +231,8 @@ def list_tool_executions(
     tool_name: str | None = None,
     risk_level: RiskLevel | None = None,
     status: str | None = None,
+    tool_source: str | None = None,
+    provider_name: str | None = None,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -232,6 +243,8 @@ def list_tool_executions(
             tool_name=tool_name,
             risk_level=risk_level.value if risk_level else None,
             status=status,
+            tool_source=tool_source,
+            provider_name=provider_name,
             limit=limit,
             offset=offset,
         )

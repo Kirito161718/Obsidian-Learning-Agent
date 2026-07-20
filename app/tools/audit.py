@@ -26,10 +26,18 @@ class ToolAuditService:
         idempotency_key: str | None = None,
         run_id: str | None = None,
         error_code: str | None = None,
+        tool_source: str = "internal",
+        provider_name: str | None = None,
+        remote_tool_name: str | None = None,
+        protocol_request_id: str | None = None,
     ) -> ToolExecution:
         record = ToolExecution(
             run_id=run_id,
             tool_name=tool_name[:100],
+            tool_source="mcp" if tool_source == "mcp" else "internal",
+            provider_name=safe_text_preview(provider_name, 100) if provider_name else None,
+            remote_tool_name=safe_text_preview(remote_tool_name, 100) if remote_tool_name else None,
+            protocol_request_id=safe_text_preview(protocol_request_id, 100) if protocol_request_id else None,
             risk_level=risk_level,
             caller_type=caller_type,
             decision=decision,
@@ -84,6 +92,8 @@ class ToolAuditService:
         tool_name: str | None = None,
         risk_level: str | None = None,
         status: str | None = None,
+        tool_source: str | None = None,
+        provider_name: str | None = None,
         limit: int = 20,
         offset: int = 0,
     ) -> tuple[int, list[ToolExecution]]:
@@ -95,6 +105,10 @@ class ToolAuditService:
                 query = query.filter(ToolExecution.risk_level == risk_level)
             if status:
                 query = query.filter(ToolExecution.status == status)
+            if tool_source:
+                query = query.filter(ToolExecution.tool_source == tool_source)
+            if provider_name:
+                query = query.filter(ToolExecution.provider_name == provider_name)
             total = query.count()
             rows = query.order_by(ToolExecution.created_at.desc()).offset(offset).limit(limit).all()
         except SQLAlchemyError as exc:

@@ -68,6 +68,16 @@ class Settings(BaseSettings):
         "get_session_messages,get_user_preferences,retrieve_knowledge"
     )
 
+    mcp_enabled: bool = True
+    mcp_config_path: Path = Path("config/mcp_servers.local.yaml")
+    mcp_max_input_chars: int = Field(default=10000, ge=100, le=1_000_000)
+    mcp_max_output_chars: int = Field(default=20000, ge=100, le=2_000_000)
+    mcp_max_schema_chars: int = Field(default=50000, ge=1000, le=2_000_000)
+    mcp_max_tools_per_server: int = Field(default=50, ge=1, le=500)
+    mcp_default_connect_timeout_seconds: int = Field(default=15, ge=1, le=300)
+    mcp_default_tool_timeout_seconds: int = Field(default=30, ge=1, le=600)
+    mcp_stderr_preview_chars: int = Field(default=1000, ge=100, le=10000)
+
     obsidian_enabled: bool = False
     obsidian_vault_path: Path | None = None
     obsidian_include_patterns: str = "*.md,**/*.md"
@@ -94,6 +104,8 @@ class Settings(BaseSettings):
     def resolve_project_paths(self) -> "Settings":
         if not self.upload_dir.is_absolute():
             self.upload_dir = BASE_DIR / self.upload_dir
+        if not self.mcp_config_path.is_absolute():
+            self.mcp_config_path = BASE_DIR / self.mcp_config_path
         if self.embedding_model:
             self.embedding_model_name = self.embedding_model
         return self

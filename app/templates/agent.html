@@ -9,7 +9,7 @@
 <body>
   <main class="page-shell">
     <header class="page-header">
-      <div><h1>Agent 控制台</h1><p>手动管理偏好、预览上下文预算、查看运行历史和测试只读内部工具。</p></div>
+      <div><h1>Agent 控制台</h1><p>手动管理偏好、预览上下文预算、查看运行历史，并测试只读内部与 MCP 工具。</p></div>
       <nav><a href="/learning">学习工作台</a><a href="/admin">调试后台</a></nav>
     </header>
     <div id="agentMessage" class="message" hidden></div>
@@ -48,9 +48,21 @@
       <pre id="toolOutput" class="output">尚未执行。</pre>
     </section>
 
+    <section class="panel" id="mcpServersPanel">
+      <div class="panel-header"><div><h2>MCP Servers</h2><p>只连接本地可信配置中已有的 Server；页面不能编辑命令、URL 或允许列表。</p></div><button id="refreshMcpServersBtn" type="button">刷新</button></div>
+      <div class="table-wrap"><table><thead><tr><th>Server</th><th>传输</th><th>启用</th><th>状态</th><th>工具</th><th>允许</th><th>最近错误</th><th>操作</th></tr></thead><tbody id="mcpServersBody"></tbody></table></div>
+    </section>
+
+    <section class="panel" id="mcpToolsPanel">
+      <div class="panel-header"><div><h2>MCP Tools</h2><p>远端元数据不可信；风险固定为 READ_ONLY，且只允许用户手动执行。</p></div><button id="refreshMcpToolsBtn" type="button">刷新</button></div>
+      <div class="table-wrap"><table><thead><tr><th>Namespaced Name</th><th>Remote Tool</th><th>Server</th><th>描述</th><th>风险</th><th>允许</th><th>连接</th><th>Schema Hash</th></tr></thead><tbody id="mcpToolsBody"></tbody></table></div>
+      <form id="mcpToolTestForm" class="tool-test"><label>已允许 MCP Tool<select id="mcpToolName"></select></label><label>输入 JSON<textarea id="mcpToolInput" rows="4">{}</textarea></label><button type="submit">手动执行</button></form>
+      <pre id="mcpToolOutput" class="output">尚未执行。</pre>
+    </section>
+
     <section class="panel" id="toolAuditPanel">
       <div class="panel-header"><div><h2>Tool Audit</h2><p>输入输出只显示脱敏、截断后的摘要。</p></div><button id="refreshAuditsBtn" type="button">刷新</button></div>
-      <div class="table-wrap"><table><thead><tr><th>工具</th><th>风险</th><th>决策</th><th>状态</th><th>输入 Hash</th><th>脱敏摘要</th><th>耗时</th><th>错误</th></tr></thead><tbody id="auditsBody"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>工具</th><th>来源</th><th>Provider</th><th>Remote Tool</th><th>风险</th><th>决策</th><th>状态</th><th>输入 Hash</th><th>脱敏摘要</th><th>耗时</th><th>错误</th></tr></thead><tbody id="auditsBody"></tbody></table></div>
     </section>
 
     <section class="panel" id="cleanupPanel">
