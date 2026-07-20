@@ -1,6 +1,6 @@
 # Obsidian Learning Agent 演进与复用说明
 
-> 阶段 3 已实现本地学习工作台、Learning Session、显式学习上下文、Session 问答关联和用户主动触发的学习复盘。阶段 4 已增加受限 Session Memory、手动用户偏好、Context Bundle、运行历史、只读 Tool Registry 与工具审计。使用与边界见 [`LOCAL_LEARNING_WORKSPACE.md`](LOCAL_LEARNING_WORKSPACE.md) 和 [`MEMORY_CONTEXT_TOOL_FOUNDATION.md`](MEMORY_CONTEXT_TOOL_FOUNDATION.md)。
+> 阶段 3 已实现本地学习工作台、Learning Session、显式学习上下文、Session 问答关联和用户主动触发的学习复盘。阶段 4 已增加受限 Session Memory、手动用户偏好、Context Bundle、运行历史、只读 Tool Registry 与工具审计。阶段 5 已增加官方 MCP SDK 的只读 Server/Client 端到端接入。使用与边界见 [`LOCAL_LEARNING_WORKSPACE.md`](LOCAL_LEARNING_WORKSPACE.md)、[`MEMORY_CONTEXT_TOOL_FOUNDATION.md`](MEMORY_CONTEXT_TOOL_FOUNDATION.md) 和 [`READ_ONLY_MCP_INTEGRATION.md`](READ_ONLY_MCP_INTEGRATION.md)。
 
 ## 当前定位
 
@@ -50,6 +50,6 @@ source_name = filename
 - 修改、移动或删除 Vault Markdown。
 - Obsidian 内部链接的真实检索和扩展。
 - 自动 Lessons Memory、自动 Reflection 与 LangGraph 持久化 Checkpointer。
-- Hybrid Search、BM25、任务队列、MCP 和多智能体编排。
+- Hybrid Search、BM25、任务队列、MCP 写工具、模型自主 MCP 调用和多智能体编排。
 
 旧项目背景、已有 HTTP 契约和历史部署说明仍保留在 `RAG_PROJECT_HANDOFF.md`，但若其中的独立服务复用建议与本文冲突，以本文为准。

@@ -1,0 +1,32 @@
+servers:
+  - name: local_obsidian_learning_agent
+    enabled: true
+    transport: stdio
+    command: python
+    args:
+      - -m
+      - app.mcp.server
+    cwd: .
+    timeout_seconds: 30
+    max_tools: 20
+    allowed_tools:
+      - list_learning_goals
+      - list_learning_status
+      - search_obsidian_notes
+      - get_session_messages
+      - get_user_preferences
+      - retrieve_knowledge
+    environment_allowlist: []
+    auto_connect: false
+
+  - name: example_remote
+    enabled: false
+    transport: streamable_http
+    url: https://example.invalid/mcp
+    allowed_hosts:
+      - example.invalid
+    auth_env_var: EXAMPLE_MCP_TOKEN
+    timeout_seconds: 30
+    max_tools: 20
+    allowed_tools: []
+    auto_connect: false

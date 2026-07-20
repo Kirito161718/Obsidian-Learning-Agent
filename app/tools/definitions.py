@@ -30,6 +30,11 @@ class ToolDefinition:
     idempotent: bool
     timeout_seconds: int
     allowed_callers: frozenset[CallerType]
+    tool_source: str = "internal"
+    provider_name: str | None = None
+    remote_tool_name: str | None = None
+    input_json_schema: dict[str, Any] | None = None
+    output_json_schema: dict[str, Any] | None = None
 
     def metadata(self) -> dict:
         return {
@@ -40,6 +45,9 @@ class ToolDefinition:
             "idempotent": self.idempotent,
             "timeout_seconds": self.timeout_seconds,
             "allowed_callers": sorted(caller.value for caller in self.allowed_callers),
-            "input_schema": self.input_schema.model_json_schema(),
-            "output_schema": self.output_schema.model_json_schema(),
+            "input_schema": self.input_json_schema or self.input_schema.model_json_schema(),
+            "output_schema": self.output_json_schema or self.output_schema.model_json_schema(),
+            "tool_source": self.tool_source,
+            "provider_name": self.provider_name,
+            "remote_tool_name": self.remote_tool_name,
         }

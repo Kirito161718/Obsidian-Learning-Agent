@@ -5,7 +5,7 @@
 
 阶段 3 已增加独立的本地学习工作台：访问 `http://127.0.0.1:8000/learning`，可把学习 Session、显式目标与学习状态、上传文档与 Obsidian 来源、问答历史及用户主动生成的复盘组合为连续学习闭环。完整说明见 [`docs/LOCAL_LEARNING_WORKSPACE.md`](docs/LOCAL_LEARNING_WORKSPACE.md)。
 
-阶段 4 已增加 Session Memory、用户手动偏好、统一 Context Bundle、RAG/Review Run History、只读 Tool Registry 与脱敏工具审计。访问 `http://127.0.0.1:8000/agent` 可使用 Agent 控制台；完整边界见 [`docs/MEMORY_CONTEXT_TOOL_FOUNDATION.md`](docs/MEMORY_CONTEXT_TOOL_FOUNDATION.md)。当前没有 MCP、模型自主工具调用、自动 Lessons Memory 或后台清理。
+阶段 4 已增加 Session Memory、用户手动偏好、统一 Context Bundle、RAG/Review Run History、只读 Tool Registry 与脱敏工具审计。阶段 5 在同一 Registry、Policy、Executor 与 Audit 之上增加官方 MCP SDK 的只读 Server/Client、stdio 真实传输和 Streamable HTTP Client 预留。访问 `http://127.0.0.1:8000/agent` 可使用 Agent 控制台；完整边界见 [`docs/MEMORY_CONTEXT_TOOL_FOUNDATION.md`](docs/MEMORY_CONTEXT_TOOL_FOUNDATION.md) 和 [`docs/READ_ONLY_MCP_INTEGRATION.md`](docs/READ_ONLY_MCP_INTEGRATION.md)。当前仍没有模型自主工具调用、MCP 写工具、自动 Lessons Memory 或后台清理。
 
 ## 1. 项目介绍
 
@@ -27,6 +27,7 @@
 - LangGraph：编排 RAG 状态、节点与条件路由
 - Docker Compose：启动 API 与 Qdrant
 - pytest：基础接口测试
+- 官方 MCP Python SDK：项目内只读 Server、stdio Client 与 Streamable HTTP Client
 
 ## 3. 系统架构
 
@@ -133,6 +134,20 @@ DELETE /learning-status/{status_id}
 | `RUN_HISTORY_RETENTION_DAYS` | 手动清理使用的默认保留天数 | `10` |
 | `TOOL_DEFAULT_TIMEOUT_SECONDS` | 内部 Tool 默认 Timeout | `15` |
 | `ENABLED_INTERNAL_TOOLS` | 明确启用的只读内部 Tool 名称 | 六个内置工具 |
+| `MCP_ENABLED` | 是否启用只读 MCP 管理能力 | `true` |
+| `MCP_CONFIG_PATH` | 可信本地 MCP 配置路径 | `config/mcp_servers.local.yaml` |
+| `MCP_MAX_INPUT_CHARS` | MCP Tool 输入字符上限 | `10000` |
+| `MCP_MAX_OUTPUT_CHARS` | MCP Tool 输出字符上限 | `20000` |
+| `MCP_MAX_SCHEMA_CHARS` | 单 Tool Schema 字符上限 | `50000` |
+| `MCP_MAX_TOOLS_PER_SERVER` | 单 Server 全局工具数上限 | `50` |
+
+## 只读 MCP
+
+复制 `config/mcp_servers.example.yaml` 为被 Git 忽略的 `config/mcp_servers.local.yaml`，按本机虚拟环境调整项目内 Server 的 command。应用不会自动连接；在 `/agent` 中手动 Connect、Refresh 或 Disconnect。MCP Tool 固定为 READ_ONLY、只允许 `caller=user`，并继续通过原 `/agent/tools/{tool_name}/execute` 执行与审计。项目内 Server 也可单独运行：
+
+```powershell
+python -m app.mcp.server
+```
 
 ## 7. 本地启动步骤
 

@@ -9,7 +9,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core.config import get_settings
 from app.core.logging import setup_logging
 from app.db.database import init_db
-from app.routers import admin, agent, documents, goals, learning, learning_status, obsidian, qa, rag
+from app.mcp.client_manager import MCPClientManager
+from app.routers import admin, agent, documents, goals, learning, learning_status, mcp, obsidian, qa, rag
 
 setup_logging()
 settings = get_settings()
@@ -26,7 +27,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             logger.exception("Database initialization failed")
             if settings.database_required_on_startup:
                 raise
-    yield
+    app.state.mcp_manager = MCPClientManager.from_settings(settings)
+    try:
+        yield
+    finally:
+        await app.state.mcp_manager.close_all()
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
@@ -47,3 +52,4 @@ app.include_router(obsidian.router)
 app.include_router(learning.router)
 app.include_router(admin.router)
 app.include_router(agent.router)
+app.include_router(mcp.router)

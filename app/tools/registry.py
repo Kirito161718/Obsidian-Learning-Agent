@@ -1,3 +1,5 @@
+import re
+
 from app.core.config import Settings, get_settings
 from app.tools.definitions import ToolDefinition
 
@@ -9,9 +11,21 @@ class ToolRegistry:
     def register(self, definition: ToolDefinition) -> None:
         if definition.name in self._tools:
             raise ValueError(f"Tool already registered: {definition.name}")
-        if not definition.name or not definition.name.replace("_", "").isalnum():
-            raise ValueError("Tool name must contain only letters, numbers, and underscores")
+        if not re.fullmatch(r"(?:[A-Za-z0-9_]+|mcp\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)", definition.name):
+            raise ValueError("Tool name is invalid")
         self._tools[definition.name] = definition
+
+    def unregister(self, name: str) -> None:
+        self._tools.pop(name, None)
+
+    def unregister_provider(self, provider_name: str) -> None:
+        names = [
+            name
+            for name, definition in self._tools.items()
+            if definition.tool_source == "mcp" and definition.provider_name == provider_name
+        ]
+        for name in names:
+            self._tools.pop(name, None)
 
     def get(self, name: str) -> ToolDefinition | None:
         return self._tools.get(name)

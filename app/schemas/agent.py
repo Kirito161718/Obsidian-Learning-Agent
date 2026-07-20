@@ -124,6 +124,9 @@ class ToolMetadataOut(BaseModel):
     allowed_callers: list[Literal["user", "system", "model"]]
     input_schema: dict[str, Any]
     output_schema: dict[str, Any]
+    tool_source: Literal["internal", "mcp"] = "internal"
+    provider_name: str | None = None
+    remote_tool_name: str | None = None
 
 
 class ToolExecutionOut(BaseModel):
@@ -132,6 +135,10 @@ class ToolExecutionOut(BaseModel):
     id: str
     run_id: str | None
     tool_name: str
+    tool_source: Literal["internal", "mcp"] = "internal"
+    provider_name: str | None
+    remote_tool_name: str | None
+    protocol_request_id: str | None
     risk_level: str | None
     caller_type: str
     decision: Literal["allowed", "denied", "approval_required"]

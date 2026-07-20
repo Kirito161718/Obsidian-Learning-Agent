@@ -13,6 +13,11 @@ class ToolPolicy:
     def evaluate(self, definition: ToolDefinition, caller: CallerType) -> PolicyDecision:
         if not definition.enabled:
             return PolicyDecision("denied", "tool_disabled")
+        if definition.tool_source == "mcp":
+            if definition.risk_level is not RiskLevel.READ_ONLY:
+                return PolicyDecision("denied", "mcp_risk_not_allowed")
+            if caller is not CallerType.user:
+                return PolicyDecision("denied", "caller_not_allowed")
         if caller not in definition.allowed_callers:
             return PolicyDecision("denied", "caller_not_allowed")
         if definition.risk_level is RiskLevel.HIGH_RISK:
