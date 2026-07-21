@@ -21,5 +21,8 @@ reports/*
 model_cache/
 models/
 data/migration_backup/
+data/official_sources/
+data/update_proposals/
+data/note_versions/
 *.log
 *.tmp

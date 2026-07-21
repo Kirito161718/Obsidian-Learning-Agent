@@ -7,6 +7,8 @@
 
 阶段 4 已增加 Session Memory、用户手动偏好、统一 Context Bundle、RAG/Review Run History、只读 Tool Registry 与脱敏工具审计。阶段 5 在同一 Registry、Policy、Executor 与 Audit 之上增加官方 MCP SDK 的只读 Server/Client、stdio 真实传输和 Streamable HTTP Client 预留。访问 `http://127.0.0.1:8000/agent` 可使用 Agent 控制台；完整边界见 [`docs/MEMORY_CONTEXT_TOOL_FOUNDATION.md`](docs/MEMORY_CONTEXT_TOOL_FOUNDATION.md) 和 [`docs/READ_ONLY_MCP_INTEGRATION.md`](docs/READ_ONLY_MCP_INTEGRATION.md)。当前仍没有模型自主工具调用、MCP 写工具、自动 Lessons Memory 或后台清理。
 
+阶段 6 增加用户手动登记的公开官方来源、受限抓取与 Snapshot、Source-Note Link、结构化 Evidence Proposal、MySQL 持久化 LangGraph 审批、写前 Hash stale 校验、Note Version、整批原子写入/回滚和单笔记 Reindex。访问 `http://127.0.0.1:8000/official` 管理；完整安全边界见 [`docs/OFFICIAL_SOURCE_AUDIT_AND_APPROVAL.md`](docs/OFFICIAL_SOURCE_AUDIT_AND_APPROVAL.md)。该能力不自动抓取、不支持部分批准，也不通过 MCP 暴露写工具。
+
 ## 1. 项目介绍
 
 这是一个基于 FastAPI 的企业文档 RAG 知识库问答系统 MVP，支持上传 PDF、DOCX、TXT、CSV 文档，解析后切分为 chunk，使用本地 BAAI/bge-m3 生成 embedding，写入 Qdrant 向量库，并通过 DeepSeek API 基于检索结果生成带引用来源的答案。
@@ -140,6 +142,18 @@ DELETE /learning-status/{status_id}
 | `MCP_MAX_OUTPUT_CHARS` | MCP Tool 输出字符上限 | `20000` |
 | `MCP_MAX_SCHEMA_CHARS` | 单 Tool Schema 字符上限 | `50000` |
 | `MCP_MAX_TOOLS_PER_SERVER` | 单 Server 全局工具数上限 | `50` |
+| `OFFICIAL_SOURCES_ENABLED` | 是否启用官方资料校验与审批 API | `true` |
+| `OFFICIAL_FETCH_TIMEOUT_SECONDS` | 单次官方来源请求超时 | `20` |
+| `OFFICIAL_FETCH_MAX_REDIRECTS` | 同 Host 重定向上限 | `3` |
+| `OFFICIAL_FETCH_MAX_BYTES` | 官方来源最大响应字节数 | `10485760` |
+| `OFFICIAL_SNAPSHOT_KEEP` | 每个来源默认保留的未引用快照数 | `5` |
+| `NOTE_VERSION_KEEP` | 每篇笔记默认保留的未固定版本数 | `10` |
+| `APPROVAL_EXPIRES_HOURS` | 高风险审批有效小时数 | `24` |
+| `OFFICIAL_CHECKPOINT_ENABLED` | 是否启用 MySQL 审批 Checkpointer | `true` |
+
+## 官方资料校验与审批
+
+在 `/official` 手动完成 Source 登记、Fetch、Note Link、Audit、完整 Diff 审阅与整批批准/拒绝。Apply 前会再次核对全部笔记 Hash，先创建 Before Version，再原子替换并单笔记 Reindex；任意 stale 会阻止整批写入。默认 HTTPS，公开来源内容按不可信数据处理。详情见 [`docs/OFFICIAL_SOURCE_AUDIT_AND_APPROVAL.md`](docs/OFFICIAL_SOURCE_AUDIT_AND_APPROVAL.md)。
 
 ## 只读 MCP
 

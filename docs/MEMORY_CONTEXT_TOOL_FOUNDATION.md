@@ -71,6 +71,9 @@ Answer Prompt 另行固定系统安全规则、当前问题和输出要求。动
 rag_ask
 rag_retrieve
 session_review
+official_fetch
+official_audit
+official_apply
 ```
 
 入口在执行前创建 `running` Run，并把其 ID 放入 Graph State。成功后记录状态、Rewrite、召回与来源数、模型/工具/重试次数、Context Manifest 和耗时；失败后记录稳定错误代码、脱敏且截断的错误预览和耗时。
@@ -93,9 +96,9 @@ POST /agent/maintenance/cleanup-history
 
 - **READ_ONLY**：仅在已注册、已启用、Caller 合法且输入 Schema 和作用域校验通过时执行。
 - **LOW_RISK**：枚举和策略框架已存在，但阶段 4 没有启用任何写工具，执行请求会被拒绝。
-- **HIGH_RISK**：当前没有审批系统，统一返回 `approval_required`，Callable 不执行。
+- **HIGH_RISK**：普通 `/agent/tools/{tool_name}/execute` 仍统一返回 `approval_required`，Callable 不执行。阶段 6 仅为官方更新提供独立的持久化 Approval + LangGraph Interrupt/Resume 服务；它绑定 Proposal payload hash、要求整批确认并一次性消费，不能被通用 Tool API 或模型绕过。
 
-初始只读内部工具：
+只读内部工具：
 
 ```text
 list_learning_goals
@@ -104,7 +107,12 @@ search_obsidian_notes
 get_session_messages
 get_user_preferences
 retrieve_knowledge
+list_official_sources
+get_update_proposal
+preview_update_diff
 ```
+
+前三个阶段 6 工具仍为 READ_ONLY，只读取来源、Proposal 元数据和安全 diff。`apply_update_proposal` 作为代码注册表中的 HIGH_RISK 定义用于验证默认拒绝策略，不通过通用执行 API、MCP 或模型直接执行；真正 Apply 只能在 `/official` 的审批服务校验后发生。
 
 `retrieve_knowledge` 复用现有 RAG Retrieve，不生成回答、不写 `qa_history`，也不修改 Session、目标或学习状态。单次 Tool 不无限重试，支持同步/异步 Callable 和 Timeout；异常会转换为稳定错误，不向前端返回 Python Traceback。
 
@@ -138,4 +146,4 @@ POST      /agent/maintenance/cleanup-history
 
 `GET /agent` 提供 Jinja2 + 原生 JavaScript 的 Agent 控制台。页面可显式保存偏好、预览 Context 统计、查看 Run 与 Tool Audit、手动测试只读 Tool，并要求先 Dry Run 后确认清理。`/admin` 和 `/learning` 都提供入口。
 
-阶段 5 已在本基础之上增加只读 MCP Server/Client。允许的 MCP Tool 仍复用本章的 Registry、Policy、Executor、Audit 和脱敏语义；审计额外区分 `tool_source=internal|mcp`、Provider、Remote Tool 与安全协议关联 ID。完整协议、Allowlist、stdio 生命周期和控制台说明见 [`READ_ONLY_MCP_INTEGRATION.md`](READ_ONLY_MCP_INTEGRATION.md)。当前仍没有模型自主 Function Calling、Planner/Executor 多智能体或 Human-in-the-loop 审批工作流。
+阶段 5 已在本基础之上增加只读 MCP Server/Client。允许的 MCP Tool 仍复用本章的 Registry、Policy、Executor、Audit 和脱敏语义；审计额外区分 `tool_source=internal|mcp`、Provider、Remote Tool 与安全协议关联 ID。阶段 6 的 Human-in-the-loop 仅用于官方更新审批，不改变 MCP 只读边界。完整说明见 [`READ_ONLY_MCP_INTEGRATION.md`](READ_ONLY_MCP_INTEGRATION.md) 与 [`OFFICIAL_SOURCE_AUDIT_AND_APPROVAL.md`](OFFICIAL_SOURCE_AUDIT_AND_APPROVAL.md)。当前仍没有模型自主 Function Calling 或 Planner/Executor 多智能体。

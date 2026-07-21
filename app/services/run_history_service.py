@@ -11,7 +11,14 @@ from app.security.redaction import safe_text_preview, stable_hash
 from app.services.crud_errors import ResourceNotFoundError, ServiceDatabaseError
 
 logger = logging.getLogger(__name__)
-RUN_TYPES = {"rag_ask", "rag_retrieve", "session_review"}
+RUN_TYPES = {
+    "rag_ask",
+    "rag_retrieve",
+    "session_review",
+    "official_fetch",
+    "official_audit",
+    "official_apply",
+}
 RUN_STATUSES = {"running", "succeeded", "failed", "cancelled"}
 
 

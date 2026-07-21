@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import or_
 
 from app.core.config import Settings
-from app.db.models import LearningGoal, LearningStatus, ObsidianNote, QAHistory
+from app.db.models import LearningGoal, LearningStatus, ObsidianNote, OfficialSource, QAHistory
 from app.schemas.agent import UserPreferenceOut
 from app.schemas.goal import GoalStatus, GoalType
 from app.schemas.learning_status import LearningStatusValue
@@ -13,6 +13,7 @@ from app.schemas.rag import RetrieveRequest
 from app.security.redaction import safe_text_preview
 from app.services.importance_service import ImportanceService
 from app.services.learning_session_service import LearningSessionService
+from app.services.update_proposal_service import UpdateProposalService
 from app.services.user_preference_service import UserPreferenceService
 from app.tools.definitions import CallerType, RiskLevel, ToolDefinition
 from app.tools.executor import ToolExecutionContext
@@ -162,6 +163,36 @@ class RetrieveKnowledgeOutput(BaseModel):
     chunks: list[KnowledgeChunkItem]
 
 
+class OfficialListInput(BaseModel):
+    limit: int = Field(default=20, ge=1, le=100)
+
+
+class OfficialListOutput(BaseModel):
+    total: int
+    items: list[dict]
+
+
+class ProposalToolInput(BaseModel):
+    proposal_id: str = Field(min_length=1, max_length=36)
+
+
+class ProposalToolOutput(BaseModel):
+    proposal_id: str
+    status: str
+    payload_hash: str | None = None
+    summary: str
+    items: list[dict]
+
+
+class ApplyProposalToolInput(ProposalToolInput):
+    payload_hash: str = Field(min_length=64, max_length=64)
+
+
+class ApplyProposalToolOutput(BaseModel):
+    proposal_id: str
+    status: str
+
+
 def list_learning_goals(payload: GoalListInput, context: ToolExecutionContext) -> dict:
     query = context.db.query(LearningGoal)
     if payload.status:
@@ -307,6 +338,61 @@ def retrieve_knowledge(payload: RetrieveKnowledgeInput, context: ToolExecutionCo
     }
 
 
+def list_official_sources(payload: OfficialListInput, context: ToolExecutionContext) -> dict:
+    rows = context.db.query(OfficialSource).order_by(OfficialSource.created_at.desc()).limit(payload.limit).all()
+    items = [
+        {
+            "id": row.id,
+            "name": row.name,
+            "allowed_host": row.allowed_host,
+            "source_type": row.source_type,
+            "enabled": row.enabled,
+            "status": row.status,
+            "last_checked_at": row.last_checked_at,
+        }
+        for row in rows
+    ]
+    return {"total": len(items), "items": items}
+
+
+def get_update_proposal(payload: ProposalToolInput, context: ToolExecutionContext) -> dict:
+    service = UpdateProposalService()
+    proposal = service.get(context.db, payload.proposal_id)
+    return {
+        "proposal_id": proposal.id,
+        "status": proposal.status,
+        "payload_hash": proposal.payload_hash,
+        "summary": proposal.summary,
+        "items": [
+            {
+                "note_id": item.obsidian_note_id,
+                "relative_path": item.relative_path,
+                "change_ratio": item.change_ratio,
+                "operation_count": item.operation_count,
+                "evidence": item.evidence_manifest,
+            }
+            for item in service.items(context.db, proposal.id)
+        ],
+    }
+
+
+def preview_update_diff(payload: ProposalToolInput, context: ToolExecutionContext) -> dict:
+    service = UpdateProposalService()
+    proposal = service.get(context.db, payload.proposal_id)
+    return {
+        "proposal_id": proposal.id,
+        "status": proposal.status,
+        "payload_hash": proposal.payload_hash,
+        "summary": proposal.summary,
+        "items": service.read_diff(context.db, proposal.id),
+    }
+
+
+def apply_update_proposal(payload: ApplyProposalToolInput, context: ToolExecutionContext) -> dict:
+    del payload, context
+    raise RuntimeError("HIGH_RISK proposal application requires a bound Approval and Graph resume")
+
+
 def internal_tool_definitions(settings: Settings) -> list[ToolDefinition]:
     enabled = set(settings.enabled_internal_tool_list)
     callers = frozenset({CallerType.user})
@@ -318,7 +404,7 @@ def internal_tool_definitions(settings: Settings) -> list[ToolDefinition]:
         ("get_user_preferences", "读取当前用户手动偏好。", EmptyInput, PreferenceOutput, get_user_preferences),
         ("retrieve_knowledge", "复用现有 RAG Retrieve 检索知识，不生成答案。", RetrieveKnowledgeInput, RetrieveKnowledgeOutput, retrieve_knowledge),
     ]
-    return [
+    definitions = [
         ToolDefinition(
             name=name,
             description=description,
@@ -333,3 +419,25 @@ def internal_tool_definitions(settings: Settings) -> list[ToolDefinition]:
         )
         for name, description, input_schema, output_schema, callable_obj in specs
     ]
+    official_specs: list[tuple[str, str, RiskLevel, type[BaseModel], type[BaseModel], Any]] = [
+        ("list_official_sources", "列出用户手动登记的官方来源元数据。", RiskLevel.READ_ONLY, OfficialListInput, OfficialListOutput, list_official_sources),
+        ("get_update_proposal", "读取更新 Proposal 的紧凑元数据和 Evidence。", RiskLevel.READ_ONLY, ProposalToolInput, ProposalToolOutput, get_update_proposal),
+        ("preview_update_diff", "读取已登记 Proposal 的完整 Unified Diff。", RiskLevel.READ_ONLY, ProposalToolInput, ProposalToolOutput, preview_update_diff),
+        ("apply_update_proposal", "应用全部官方资料更新；必须由审批 Resume 触发。", RiskLevel.HIGH_RISK, ApplyProposalToolInput, ApplyProposalToolOutput, apply_update_proposal),
+    ]
+    definitions.extend(
+        ToolDefinition(
+            name=name,
+            description=description,
+            risk_level=risk,
+            input_schema=input_schema,
+            output_schema=output_schema,
+            callable=callable_obj,
+            enabled=name in enabled,
+            idempotent=True,
+            timeout_seconds=settings.tool_default_timeout_seconds,
+            allowed_callers=callers,
+        )
+        for name, description, risk, input_schema, output_schema, callable_obj in official_specs
+    )
+    return definitions
