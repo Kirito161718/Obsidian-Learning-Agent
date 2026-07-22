@@ -79,6 +79,8 @@ mcp.<server_name>.<remote_tool_name>
 
 所有阶段 5 MCP Tool 的本地风险固定为 `READ_ONLY`。风险不读取 Server Annotation、Description、请求、模型或页面。MCP 的 LOW_RISK 和 HIGH_RISK 定义都会被现有 `ToolPolicy` 拒绝，HIGH_RISK Callable 不执行。
 
+阶段 6 虽然在内部 Registry 增加官方来源/Proposal 的只读查询工具，并登记一个默认拒绝的 `apply_update_proposal` HIGH_RISK 定义，但项目内 MCP Server 的显式导出清单仍固定为上面的六个只读工具。官方更新只能由 `/official` 的一次性 Approval 与持久化 LangGraph Resume 执行，不会被 MCP Discover、Tool Call 或模型调用。
+
 MCP Definition 只允许 `caller=user`；`model` 和 `system` 均被策略拒绝。执行 API 在服务端固定 Caller，输入中的 `caller_type` 或 `risk_level` 不能覆盖策略。当前 LangGraph 不发现、不选择也不执行 MCP Tool，MCP 输出不会自动进入 Prompt。
 
 输入先受总字符限制，再按发现的 JSON Schema 验证；失败时不会调用 Server。输出只保留结构化结果或安全文本块，不保留完整协议包；经过递归脱敏后按字符上限安全截断并标记。稳定错误码以 `mcp_` 开头，前端不返回 Python Traceback。
@@ -117,4 +119,4 @@ Connect -> 检查六个 Tool -> 手动执行 -> Refresh Tools -> Disconnect
 
 ## 后续 GitHub MCP 接入边界
 
-后续接入官方 GitHub MCP Server 时，应先把固定启动方式或 HTTPS Endpoint 写入可信本地配置，固定 Host 与环境变量名，并以空 Allowlist 起步；人工审查实际发现的 Tool Schema 后，只加入明确只读的查询 Tool。GitHub Token 只从环境读取，不进入 YAML、日志、页面或审计。当前阶段不允许 GitHub 写操作、任意仓库命令、模型自主调用或 HIGH_RISK 执行。
+后续接入官方 GitHub MCP Server 时，应先把固定启动方式或 HTTPS Endpoint 写入可信本地配置，固定 Host 与环境变量名，并以空 Allowlist 起步；人工审查实际发现的 Tool Schema 后，只加入明确只读的查询 Tool。GitHub Token 只从环境读取，不进入 YAML、日志、页面或审计。当前 MCP 边界不允许 GitHub 写操作、任意仓库命令、模型自主调用或 HIGH_RISK 执行；阶段 6 的服务内审批不会放宽该边界。

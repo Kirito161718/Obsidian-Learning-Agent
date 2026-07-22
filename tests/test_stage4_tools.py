@@ -190,12 +190,18 @@ def seed_internal_data(db):
 
 
 @pytest.mark.anyio
-async def test_initial_internal_tools_are_unique_read_only_enabled_and_bounded(db_session):
+async def test_internal_tools_remain_unique_and_stage6_high_risk_tool_is_policy_gated(db_session):
     goal, status, note, session = seed_internal_data(db_session)
     registry = build_tool_registry(Settings(_env_file=None))
     names = [item.name for item in registry.list()]
-    assert len(names) == len(set(names)) == 6
-    assert all(item.risk_level is RiskLevel.READ_ONLY and item.idempotent for item in registry.list())
+    assert len(names) == len(set(names)) == 10
+    assert all(item.idempotent for item in registry.list())
+    assert registry.get("apply_update_proposal").risk_level is RiskLevel.HIGH_RISK
+    assert all(
+        item.risk_level is RiskLevel.READ_ONLY
+        for item in registry.list()
+        if item.name != "apply_update_proposal"
+    )
     executor = ToolExecutor(registry)
     goals, _ = await executor.execute(db_session, tool_name="list_learning_goals", raw_input={"limit": 1})
     statuses, _ = await executor.execute(db_session, tool_name="list_learning_status", raw_input={"limit": 1})
@@ -251,7 +257,7 @@ async def test_retrieve_knowledge_reuses_service_and_never_writes_qa(db_session)
 
 def test_tool_registry_api_never_returns_callable_path(client):
     response = client.get("/agent/tools")
-    assert response.status_code == 200 and len(response.json()) == 6
+    assert response.status_code == 200 and len(response.json()) == 10
     assert "callable" not in response.text and "app.tools.internal" not in response.text
     assert client.get("/agent/tools/unknown_tool").status_code == 404
 

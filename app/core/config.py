@@ -65,7 +65,8 @@ class Settings(BaseSettings):
     tool_audit_output_max_chars: int = Field(default=1000, ge=50, le=10000)
     enabled_internal_tools: str = (
         "list_learning_goals,list_learning_status,search_obsidian_notes,"
-        "get_session_messages,get_user_preferences,retrieve_knowledge"
+        "get_session_messages,get_user_preferences,retrieve_knowledge,"
+        "list_official_sources,get_update_proposal,preview_update_diff,apply_update_proposal"
     )
 
     mcp_enabled: bool = True
@@ -88,6 +89,29 @@ class Settings(BaseSettings):
     obsidian_chunk_target_chars: int = 1200
     obsidian_chunk_max_chars: int = 1800
     obsidian_atomic_block_hard_max_chars: int = 6000
+
+    official_sources_enabled: bool = True
+    official_fetch_timeout_seconds: int = Field(default=20, ge=1, le=120)
+    official_fetch_max_redirects: int = Field(default=3, ge=0, le=10)
+    official_fetch_max_bytes: int = Field(default=10_485_760, ge=1024, le=100_000_000)
+    official_fetch_user_agent: str = Field(default="Obsidian-Learning-Agent/1.0", min_length=1, max_length=200)
+    official_fetch_allowed_content_types: str = (
+        "text/html,text/plain,text/markdown,application/pdf"
+    )
+    official_fetch_allow_local_http: bool = False
+    official_html_max_chars: int = Field(default=500_000, ge=1000, le=5_000_000)
+    official_pdf_max_pages: int = Field(default=300, ge=1, le=1000)
+    official_snapshot_keep: int = Field(default=5, ge=1, le=100)
+    note_version_keep: int = Field(default=10, ge=1, le=1000)
+    update_proposal_retention_days: int = Field(default=30, ge=1, le=3650)
+    official_audit_max_linked_notes: int = Field(default=10, ge=1, le=100)
+    official_proposal_max_items: int = Field(default=10, ge=1, le=100)
+    official_proposal_max_operations_per_note: int = Field(default=20, ge=1, le=200)
+    official_proposal_max_change_ratio: float = Field(default=0.35, gt=0, le=1)
+    official_evidence_excerpt_max_chars: int = Field(default=500, ge=20, le=5000)
+    official_proposal_summary_max_chars: int = Field(default=2000, ge=100, le=20_000)
+    approval_expires_hours: int = Field(default=24, ge=1, le=720)
+    official_checkpoint_enabled: bool = True
 
     deepseek_api_key: str = Field(default="", repr=False)
     deepseek_base_url: str = "https://api.deepseek.com"
@@ -135,6 +159,22 @@ class Settings(BaseSettings):
         return self.runtime_dir / "temp"
 
     @property
+    def official_temp_dir(self) -> Path:
+        return self.temp_dir / "official_updates"
+
+    @property
+    def official_snapshot_dir(self) -> Path:
+        return BASE_DIR / "data" / "official_sources" / "snapshots"
+
+    @property
+    def update_proposal_dir(self) -> Path:
+        return BASE_DIR / "data" / "update_proposals"
+
+    @property
+    def note_version_dir(self) -> Path:
+        return BASE_DIR / "data" / "note_versions"
+
+    @property
     def report_dir(self) -> Path:
         return BASE_DIR / "reports"
 
@@ -175,6 +215,10 @@ class Settings(BaseSettings):
     @property
     def enabled_internal_tool_list(self) -> tuple[str, ...]:
         return self._csv_values(self.enabled_internal_tools)
+
+    @property
+    def official_fetch_allowed_content_type_list(self) -> tuple[str, ...]:
+        return tuple(value.casefold() for value in self._csv_values(self.official_fetch_allowed_content_types))
 
     @staticmethod
     def _csv_values(value: str) -> tuple[str, ...]:

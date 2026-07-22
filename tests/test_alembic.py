@@ -44,3 +44,26 @@ def test_stage3_migration_has_expected_revision_and_objects():
     assert 'op.add_column("qa_history"' in source
     assert 'ondelete="SET NULL"' in source
     assert 'uq_learning_session_reviews_session_id' in source
+
+
+def test_stage6_migration_has_single_expected_revision_and_persistent_checkpoint_tables():
+    source = Path("alembic/versions/20260721_0007_add_official_source_audit.py").read_text(encoding="utf-8")
+    assert 'revision = "20260721_0007"' in source
+    assert 'down_revision = "20260720_0006"' in source
+    for table in (
+        "official_sources",
+        "official_source_snapshots",
+        "official_source_note_links",
+        "update_proposals",
+        "update_proposal_items",
+        "approval_requests",
+        "note_versions",
+        "official_checkpoints",
+        "official_checkpoint_writes",
+    ):
+        assert f'"{table}"' in source
+    assert "uq_official_snapshots_source_hash" in source
+    assert "fk_update_proposals_approval_request" in source
+    assert 'mysql.DATETIME(fsp=6)' in source
+    assert 'sa.Column("created_at", precise_datetime()' in source
+    assert 'mysql.MEDIUMBLOB()' in source

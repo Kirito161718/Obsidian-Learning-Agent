@@ -2,7 +2,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -10,7 +12,8 @@ from app.core.config import get_settings
 from app.core.logging import setup_logging
 from app.db.database import init_db
 from app.mcp.client_manager import MCPClientManager
-from app.routers import admin, agent, documents, goals, learning, learning_status, mcp, obsidian, qa, rag
+from app.official_sources.errors import OfficialSourceError
+from app.routers import admin, agent, documents, goals, learning, learning_status, mcp, obsidian, official_sources, qa, rag
 
 setup_logging()
 settings = get_settings()
@@ -43,12 +46,32 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.exception_handler(OfficialSourceError)
+async def official_source_error_handler(request: Request, exc: OfficialSourceError) -> JSONResponse:
+    del request
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": {"error_code": exc.code, "message": str(exc)}},
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    del request
+    errors = [
+        {key: value for key, value in item.items() if key not in {"input", "ctx"}}
+        for item in exc.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": errors})
+
+
 app.include_router(documents.router)
 app.include_router(rag.router)
 app.include_router(qa.router)
 app.include_router(goals.router)
 app.include_router(learning_status.router)
 app.include_router(obsidian.router)
+app.include_router(official_sources.router)
 app.include_router(learning.router)
 app.include_router(admin.router)
 app.include_router(agent.router)

@@ -1,7 +1,8 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, JSON, LargeBinary, String, Text, UniqueConstraint
+from sqlalchemy.dialects.mysql import DATETIME as MySQLDateTime, MEDIUMBLOB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
@@ -13,6 +14,10 @@ def new_uuid() -> str:
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
+
+
+PRECISE_DATETIME = DateTime(timezone=True).with_variant(MySQLDateTime(fsp=6), "mysql")
+CHECKPOINT_BLOB = LargeBinary().with_variant(MEDIUMBLOB(), "mysql")
 
 
 class Document(Base):
@@ -187,6 +192,14 @@ class AgentRun(Base):
     model_call_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     tool_call_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    official_source_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    official_proposal_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    official_snapshot_changed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    linked_note_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    proposal_item_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    approval_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    applied_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    reindex_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
     context_manifest: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
     error_message_preview: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -222,3 +235,209 @@ class ToolExecution(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+
+class OfficialSource(Base):
+    __tablename__ = "official_sources"
+    __table_args__ = (
+        Index("ix_official_sources_enabled_status", "enabled", "status"),
+        Index("ix_official_sources_allowed_host_created_at", "allowed_host", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    canonical_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    allowed_host: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    source_type: Mapped[str] = mapped_column(String(20), nullable=False, default="auto")
+    content_selector: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", index=True)
+    last_checked_at: Mapped[datetime | None] = mapped_column(PRECISE_DATETIME, nullable=True)
+    last_success_at: Mapped[datetime | None] = mapped_column(PRECISE_DATETIME, nullable=True)
+    last_error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    last_error_preview: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(PRECISE_DATETIME, default=utc_now, index=True)
+    updated_at: Mapped[datetime] = mapped_column(PRECISE_DATETIME, default=utc_now, onupdate=utc_now)
+
+
+class OfficialSourceSnapshot(Base):
+    __tablename__ = "official_source_snapshots"
+    __table_args__ = (
+        UniqueConstraint("source_id", "content_hash", name="uq_official_snapshots_source_hash"),
+        Index("ix_official_snapshots_source_created", "source_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    source_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("official_sources.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    storage_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    normalized_format: Mapped[str] = mapped_column(String(20), nullable=False)
+    normalizer_version: Mapped[str] = mapped_column(String(30), nullable=False)
+    http_status: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_type: Mapped[str] = mapped_column(String(200), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    etag: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    last_modified: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    section_manifest: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(PRECISE_DATETIME, default=utc_now, index=True)
+
+
+class OfficialSourceNoteLink(Base):
+    __tablename__ = "official_source_note_links"
+    __table_args__ = (
+        UniqueConstraint("source_id", "obsidian_note_id", name="uq_official_source_note_link"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    source_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("official_sources.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    obsidian_note_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("obsidian_notes.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    target_heading_paths: Mapped[list[list[str]]] = mapped_column(JSON, nullable=False, default=list)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(PRECISE_DATETIME, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(PRECISE_DATETIME, default=utc_now, onupdate=utc_now)
+
+
+class UpdateProposal(Base):
+    __tablename__ = "update_proposals"
+    __table_args__ = (Index("ix_update_proposals_source_status_created", "source_id", "status", "created_at"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    source_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("official_sources.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    snapshot_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("official_source_snapshots.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    previous_snapshot_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("official_source_snapshots.id", ondelete="SET NULL"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="building", index=True)
+    payload_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    summary: Mapped[str] = mapped_column(String(2000), nullable=False, default="")
+    item_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    graph_thread_id: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    approval_request_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("approval_requests.id", ondelete="SET NULL"), nullable=True, unique=True
+    )
+    model_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    model_call_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(PRECISE_DATETIME, default=utc_now, index=True)
+    ready_at: Mapped[datetime | None] = mapped_column(PRECISE_DATETIME, nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(PRECISE_DATETIME, nullable=True)
+    rejected_at: Mapped[datetime | None] = mapped_column(PRECISE_DATETIME, nullable=True)
+    applied_at: Mapped[datetime | None] = mapped_column(PRECISE_DATETIME, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    error_preview: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+
+class UpdateProposalItem(Base):
+    __tablename__ = "update_proposal_items"
+    __table_args__ = (
+        UniqueConstraint("proposal_id", "obsidian_note_id", name="uq_update_proposal_note"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    proposal_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("update_proposals.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    obsidian_note_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("obsidian_notes.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    relative_path: Mapped[str] = mapped_column(String(700), nullable=False)
+    base_note_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    proposed_note_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    proposed_content_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    diff_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    change_ratio: Mapped[float] = mapped_column(Float, nullable=False)
+    operation_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    operation_manifest: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
+    evidence_manifest: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="ready", index=True)
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    error_preview: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(PRECISE_DATETIME, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(PRECISE_DATETIME, default=utc_now, onupdate=utc_now)
+
+
+class ApprovalRequest(Base):
+    __tablename__ = "approval_requests"
+    __table_args__ = (Index("ix_approval_requests_target", "target_type", "target_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    operation_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    target_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    risk_level: Mapped[str] = mapped_column(String(20), nullable=False, default="HIGH_RISK")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", index=True)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    summary: Mapped[str] = mapped_column(String(2000), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(PRECISE_DATETIME, nullable=False, index=True)
+    decided_at: Mapped[datetime | None] = mapped_column(PRECISE_DATETIME, nullable=True)
+    consumed_at: Mapped[datetime | None] = mapped_column(PRECISE_DATETIME, nullable=True)
+    decision_note: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(PRECISE_DATETIME, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(PRECISE_DATETIME, default=utc_now, onupdate=utc_now)
+
+
+class NoteVersion(Base):
+    __tablename__ = "note_versions"
+    __table_args__ = (
+        UniqueConstraint("obsidian_note_id", "proposal_id", name="uq_note_versions_note_proposal"),
+        Index("ix_note_versions_note_created", "obsidian_note_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    obsidian_note_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("obsidian_notes.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    proposal_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("update_proposals.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    snapshot_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("official_source_snapshots.id", ondelete="RESTRICT"), nullable=False
+    )
+    relative_path: Mapped[str] = mapped_column(String(700), nullable=False)
+    before_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    after_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    backup_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    diff_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    pinned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(PRECISE_DATETIME, default=utc_now, index=True)
+
+
+class OfficialCheckpoint(Base):
+    __tablename__ = "official_checkpoints"
+    __table_args__ = (Index("ix_official_checkpoints_thread_created", "thread_id", "created_at"),)
+
+    thread_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    checkpoint_ns: Mapped[str] = mapped_column(String(100), primary_key=True, default="")
+    checkpoint_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    parent_checkpoint_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    checkpoint_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    checkpoint_blob: Mapped[bytes] = mapped_column(CHECKPOINT_BLOB, nullable=False)
+    metadata_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    metadata_blob: Mapped[bytes] = mapped_column(CHECKPOINT_BLOB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(PRECISE_DATETIME, default=utc_now, index=True)
+
+
+class OfficialCheckpointWrite(Base):
+    __tablename__ = "official_checkpoint_writes"
+
+    thread_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    checkpoint_ns: Mapped[str] = mapped_column(String(100), primary_key=True, default="")
+    checkpoint_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    task_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    write_index: Mapped[int] = mapped_column(Integer, primary_key=True)
+    channel: Mapped[str] = mapped_column(String(255), nullable=False)
+    value_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    value_blob: Mapped[bytes] = mapped_column(CHECKPOINT_BLOB, nullable=False)
+    task_path: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(PRECISE_DATETIME, default=utc_now)
