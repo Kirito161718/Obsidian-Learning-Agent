@@ -23,6 +23,8 @@ from app.official_sources.snapshot_store import SnapshotStore
 from app.official_sources.url_security import URLSecurityValidator
 from app.schemas.official_sources import NoteLinkCreate, OfficialSourceCreate, OfficialSourcePatch
 from app.security.redaction import safe_text_preview
+from app.observability import get_observability
+from app.services.run_history_service import RunHistoryService
 
 
 class OfficialSourceService:
@@ -185,6 +187,7 @@ class OfficialFetchService:
         self.fetcher = fetcher or OfficialSourceFetcher(self.settings)
         self.normalizer = normalizer or OfficialContentNormalizer(self.settings)
         self.store = store or SnapshotStore(self.settings)
+        self.run_history = RunHistoryService(self.settings)
 
     def fetch_source(self, db: Session, source_id: str) -> dict:
         source = self.sources.get(db, source_id)
@@ -200,6 +203,34 @@ class OfficialFetchService:
         )
         db.add(run)
         db.commit()
+        observability = get_observability()
+        with observability.trace(
+            name="ola.official.fetch",
+            run_type="chain",
+            metadata={
+                "flow_type": "official_fetch",
+                "internal_run_id": run.id,
+                "official_source_id": source.id,
+                "status": "running",
+            },
+            tags=["ola", "official", "fetch"],
+        ) as span:
+            self._associate_trace(db, run.id, span, observability)
+            result = self._fetch_traced(db, source, run)
+            span.update(
+                {
+                    "status": "succeeded",
+                    "snapshot_id": result.get("snapshot_id"),
+                    "snapshot_changed": bool(result.get("changed")),
+                    "content_hash": result.get("content_hash"),
+                    "http_status": result.get("http_status"),
+                    "duration_ms": result.get("duration"),
+                }
+            )
+        self._associate_trace(db, run.id, span, observability)
+        return result
+
+    def _fetch_traced(self, db: Session, source: OfficialSource, run: AgentRun) -> dict:
         started = datetime.now(UTC)
         latest = db.scalar(
             select(OfficialSourceSnapshot)
@@ -289,6 +320,23 @@ class OfficialFetchService:
                 self._finish_run(run, started, changed=None)
             db.commit()
             raise official_error("official_fetch_failed", "Official source fetch failed", status_code=502) from exc
+
+    def _associate_trace(self, db: Session, run_id: str, span, observability) -> None:
+        status = observability.status()
+        if span.external_trace_id:
+            local_status = "submitted" if span.status == "submitted" else "pending"
+        elif status["enabled"]:
+            local_status = "failed"
+        else:
+            local_status = "disabled"
+        self.run_history.safe_set_observability(
+            db,
+            run_id,
+            provider=status["provider"],
+            external_trace_id=span.external_trace_id,
+            status=local_status,
+            error_code=status["last_error_code"] if local_status == "failed" else None,
+        )
 
     def list_snapshots(self, db: Session, source_id: str) -> list[OfficialSourceSnapshot]:
         self.sources.get(db, source_id)

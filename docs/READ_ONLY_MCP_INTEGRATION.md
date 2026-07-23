@@ -98,6 +98,8 @@ protocol_request_id  安全截断的本地协议关联 ID
 
 内部工具继续记录 `tool_source=internal`。MCP 成功、失败、Caller 拒绝和输入拒绝继续经过现有 Tool Audit；输入输出沿用敏感键、用户主目录和绝对路径脱敏，并受摘要上限约束。数据库不保存 Token、Authorization Header、完整 JSON-RPC、stdout 原始流、完整 Chunk、Prompt 或 LangGraph State。
 
+阶段 7A 在不改变上述语义的前提下增加 `ola.tool.execute`、`ola.mcp.connect`、`ola.mcp.discover`、`ola.mcp.call` 和 `ola.mcp.disconnect`。MCP Span 只包含安全 Server 名、Tool 名、READ_ONLY 风险、Timeout、状态、耗时、输入输出字符数和错误码；不发送 JSON-RPC、arguments、result、stdout/stderr 或认证环境。LangSmith 故障不跳过或回滚本地 Tool Audit。
+
 ## API 与控制台
 
 ```text

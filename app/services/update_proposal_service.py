@@ -26,6 +26,7 @@ from app.official_sources.version_store import NoteVersionStore
 from app.security.redaction import safe_text_preview
 from app.services.approval_service import ApprovalService
 from app.services.obsidian_index_service import ObsidianIndexService
+from app.observability import get_observability
 
 
 class UpdateProposalService:
@@ -129,18 +130,33 @@ class UpdateProposalService:
                 for item, target, document, proposed in targets:
                     diff = self._artifact_path(proposal.id, item.diff_path, ".diff").read_text(encoding="utf-8")
                     version_id = hashlib.sha256(f"{proposal.id}:{item.obsidian_note_id}".encode()).hexdigest()[:36]
-                    versions[item.id] = self.versions.create(
-                        db,
-                        version_id=version_id,
-                        note_id=item.obsidian_note_id,
-                        proposal_id=proposal.id,
-                        snapshot_id=proposal.snapshot_id,
-                        relative_path=item.relative_path,
-                        before_content=document.raw,
-                        before_hash=item.base_note_hash,
-                        after_hash=item.proposed_note_hash,
-                        diff=diff,
-                    )
+                    with get_observability().trace(
+                        name="ola.official.version.create",
+                        run_type="chain",
+                        metadata={
+                            "flow_type": "official_version",
+                            "internal_run_id": run.id,
+                            "proposal_id": proposal.id,
+                            "snapshot_id": proposal.snapshot_id,
+                            "note_id": item.obsidian_note_id,
+                            "version_id": version_id,
+                            "status": "running",
+                        },
+                        tags=["ola", "official", "version"],
+                    ) as span:
+                        versions[item.id] = self.versions.create(
+                            db,
+                            version_id=version_id,
+                            note_id=item.obsidian_note_id,
+                            proposal_id=proposal.id,
+                            snapshot_id=proposal.snapshot_id,
+                            relative_path=item.relative_path,
+                            before_content=document.raw,
+                            before_hash=item.base_note_hash,
+                            after_hash=item.proposed_note_hash,
+                            diff=diff,
+                        )
+                        span.update({"status": "succeeded"})
                 for item, target, _, _ in targets:
                     self.replace_file(staged[item.id], target)
                     replaced.append((item, target))
@@ -270,21 +286,42 @@ class UpdateProposalService:
         return ok
 
     def _reindex(self, db: Session, proposal: UpdateProposal, items: list[UpdateProposalItem]) -> dict:
-        service = self.index_service or ObsidianIndexService(settings=self.settings)
-        results: list[dict] = []
-        failed = False
-        for item in items:
-            try:
-                result = service.reindex_note(db, item.obsidian_note_id)
-                item_failed = bool((result.get("counts") or {}).get("error")) or any(
-                    entry.get("kind") == "error" for entry in (result.get("items") or [])
-                )
-            except Exception as exc:
-                result = {"error_code": "official_reindex_failed", "error": type(exc).__name__}
-                item_failed = True
-            failed = failed or item_failed
-            results.append({"note_id": item.obsidian_note_id, "failed": item_failed, "result": result})
-        return {"failed": failed, "items": results}
+        with get_observability().trace(
+            name="ola.official.reindex",
+            run_type="chain",
+            metadata={
+                "flow_type": "official_reindex",
+                "internal_run_id": proposal.id,
+                "proposal_id": proposal.id,
+                "snapshot_id": proposal.snapshot_id,
+                "point_target_count": len(items),
+                "status": "running",
+            },
+            tags=["ola", "official", "reindex"],
+        ) as span:
+            service = self.index_service or ObsidianIndexService(settings=self.settings)
+            results: list[dict] = []
+            failed = False
+            for item in items:
+                try:
+                    result = service.reindex_note(db, item.obsidian_note_id)
+                    item_failed = bool((result.get("counts") or {}).get("error")) or any(
+                        entry.get("kind") == "error" for entry in (result.get("items") or [])
+                    )
+                except Exception as exc:
+                    result = {"error_code": "official_reindex_failed", "error": type(exc).__name__}
+                    item_failed = True
+                failed = failed or item_failed
+                results.append({"note_id": item.obsidian_note_id, "failed": item_failed, "result": result})
+            span.update(
+                {
+                    "status": "failed" if failed else "succeeded",
+                    "point_result_count": len(results),
+                    "failed_count": sum(bool(item["failed"]) for item in results),
+                    "error_code": "official_reindex_failed" if failed else None,
+                }
+            )
+            return {"failed": failed, "items": results}
 
     def _note_path(self, relative_path: str) -> Path:
         if not self.settings.obsidian_vault_path:

@@ -37,6 +37,10 @@ LLM 只能返回受 Schema 约束的 `replace`、`insert_before`、`insert_after
 
 Proposal 构建完成后，官方更新 LangGraph 创建一次性 Approval 并在 `interrupt()` 处暂停。`thread_id` 固定为 `proposal_id`。阶段 6 使用实现官方 `BaseCheckpointSaver` 接口的 SQLAlchemy/MySQL Saver；表结构由 Alembic `20260721_0007` 管理。实现按 `langgraph==1.2.9` 与 `langgraph-checkpoint==4.1.1` 校验，Checkpoint 只保存 ID、相对路径、Hash、状态和紧凑统计，不保存网页、笔记、Prompt 或 Proposal 正文。
 
+阶段 7A 增加 `ola.official.fetch`、`ola.official.audit`、`ola.official.snapshot.compare`、`ola.official.proposal.build`、`ola.official.approval.interrupt`、`ola.official.approval.resume`、`ola.official.apply`、`ola.official.version.create` 和 `ola.official.reindex`。Interrupt 结束为 pending；Resume 可以建立新的顶层 Trace，并用 `proposal_id`、`approval_request_id` 与 `checkpoint_thread_id` 关联，不要求跨进程保持同一根 Trace。
+
+这些 Span 只发送 ID、Hash、数量、状态、风险和耗时，不发送 Source/Snapshot 正文、LLM Prompt、Proposal、Diff、拟写笔记、Before Version、Checkpoint State 或 Vault 路径。LangSmith 失败不改变审批一次性消费、stale 校验、整批原子写入、回滚与 Reindex 语义。
+
 进程重启后，客户端用同一 Proposal ID 读取 pending 状态；服务端校验用户提交的 payload hash、`confirm_all=true` 与固定确认文本，再以 `Command(resume=...)` 恢复。决策与 Resume 外层使用按 Proposal 派生的 MySQL named lock，确保多 Worker 并发只执行一次；连接中断会自动释放，允许后续请求从 Checkpoint 恢复。过期、拒绝、已消费、Hash 不符或重复决策均不能执行。阶段 6 不支持部分审批，也不允许模型或 MCP 自主批准。
 
 ## 写入、回滚、版本与索引

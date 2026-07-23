@@ -20,6 +20,7 @@ RUN_TYPES = {
     "official_apply",
 }
 RUN_STATUSES = {"running", "succeeded", "failed", "cancelled"}
+OBSERVABILITY_STATUSES = {"disabled", "pending", "submitted", "failed"}
 
 
 class RunHistoryService:
@@ -112,6 +113,54 @@ class RunHistoryService:
             self.succeed(db, run_id, state=state)
         except Exception as history_exc:
             logger.warning("Run history success recording failed: error_type=%s", type(history_exc).__name__)
+
+    def set_observability(
+        self,
+        db: Session,
+        run_id: str,
+        *,
+        provider: str | None,
+        external_trace_id: str | None,
+        status: str,
+        error_code: str | None = None,
+    ) -> AgentRun:
+        if status not in OBSERVABILITY_STATUSES:
+            raise ValueError("Unsupported observability status")
+        run = self.get(db, run_id)
+        run.observability_provider = provider[:30] if provider else None
+        run.external_trace_id = external_trace_id[:36] if external_trace_id else None
+        run.observability_status = status
+        run.observability_error_code = error_code[:100] if error_code else None
+        self._commit(db, "Failed to associate observability trace")
+        db.refresh(run)
+        return run
+
+    def safe_set_observability(
+        self,
+        db: Session,
+        run_id: str | None,
+        *,
+        provider: str | None,
+        external_trace_id: str | None,
+        status: str,
+        error_code: str | None = None,
+    ) -> None:
+        if not run_id:
+            return
+        try:
+            self.set_observability(
+                db,
+                run_id,
+                provider=provider,
+                external_trace_id=external_trace_id,
+                status=status,
+                error_code=error_code,
+            )
+        except Exception as history_exc:
+            logger.warning(
+                "Run observability association failed: error_type=%s",
+                type(history_exc).__name__,
+            )
 
     def get(self, db: Session, run_id: str) -> AgentRun:
         try:

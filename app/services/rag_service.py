@@ -6,6 +6,11 @@ from app.core.config import get_settings
 from app.domain.retrieved_chunk import RetrievedChunk
 from app.graphs.rag_graph import RagWorkflow
 from app.graphs.rag_nodes import NO_CONTEXT_ANSWER
+from app.observability import get_observability
+from app.observability.metadata import (
+    rag_result_metadata,
+    rag_top_level_metadata,
+)
 from app.schemas.rag import (
     AskRequest,
     AskResponse,
@@ -57,24 +62,43 @@ class RagService:
 
     def ask(self, request: AskRequest, db: Session) -> AskResponse:
         run_id = self._create_run(db, "rag_ask", request)
-        try:
-            state = self.workflow.invoke(
-                mode="ask",
-                question=request.question,
-                document_id=request.document_id,
-                top_k=request.top_k,
-                source_types=request.source_types,
-                source_path_prefixes=request.source_path_prefixes,
-                session_id=request.session_id,
-                goal_id=request.goal_id,
-                learning_status_id=request.learning_status_id,
-                run_id=run_id,
-                db=db,
-            )
-        except Exception as exc:
-            self.run_history.safe_fail(db, run_id, exc)
-            raise
-        self.run_history.safe_succeed(db, run_id, state=state)
+        observability = get_observability()
+        with observability.trace(
+            name="ola.rag.ask",
+            run_type="chain",
+            metadata={
+                **rag_top_level_metadata(
+                    endpoint_type="ask",
+                    internal_run_id=run_id,
+                    session_id=request.session_id,
+                    question=request.question,
+                ),
+                "model_name": getattr(self.llm_client, "model", None),
+                "prompt_version": "rag-system-v1",
+            },
+            tags=["ola", "rag", "ask"],
+        ) as span:
+            self._associate_trace(db, run_id, span, observability)
+            try:
+                state = self.workflow.invoke(
+                    mode="ask",
+                    question=request.question,
+                    document_id=request.document_id,
+                    top_k=request.top_k,
+                    source_types=request.source_types,
+                    source_path_prefixes=request.source_path_prefixes,
+                    session_id=request.session_id,
+                    goal_id=request.goal_id,
+                    learning_status_id=request.learning_status_id,
+                    run_id=run_id,
+                    db=db,
+                )
+            except Exception as exc:
+                self.run_history.safe_fail(db, run_id, exc)
+                raise
+            span.update(rag_result_metadata(state))
+            self.run_history.safe_succeed(db, run_id, state=state)
+        self._associate_trace(db, run_id, span, observability)
         sources = [self._to_source_chunk(chunk) for chunk in state.get("context_chunks", [])]
         return AskResponse(
             answer=state.get("answer") or NO_CONTEXT_ANSWER,
@@ -96,39 +120,69 @@ class RagService:
         return_query: bool = False,
     ) -> list[dict] | tuple[list[dict], str]:
         """Compatibility entry point for the existing retrieval evaluation script."""
-        state = self.workflow.invoke(
-            mode="retrieve",
-            question=question,
-            document_id=document_id,
-            top_k=top_k,
-            rewrite_enabled=use_query_rewrite,
-        )
+        observability = get_observability()
+        with observability.trace(
+            name="ola.rag.retrieve",
+            run_type="chain",
+            metadata=rag_top_level_metadata(
+                endpoint_type="retrieve_context",
+                internal_run_id=None,
+                session_id=None,
+                question=question,
+            ),
+            tags=["ola", "rag", "retrieve"],
+        ) as span:
+            state = self.workflow.invoke(
+                mode="retrieve",
+                question=question,
+                document_id=document_id,
+                top_k=top_k,
+                rewrite_enabled=use_query_rewrite,
+            )
+            span.update(rag_result_metadata(state))
         chunks = [chunk.to_rerank_item() for chunk in state.get("context_chunks", [])]
         query = state.get("rewritten_query") or state.get("original_query") or question.strip()
         return (chunks, query) if return_query else chunks
 
     def retrieve(self, request: AskRequest, db: Session | None = None) -> RetrieveResponse:
         run_id = self._create_run(db, "rag_retrieve", request) if db is not None else None
-        try:
-            state = self.workflow.invoke(
-                mode="retrieve",
-                question=request.question,
-                document_id=request.document_id,
-                top_k=request.top_k,
-                source_types=request.source_types,
-                source_path_prefixes=request.source_path_prefixes,
+        observability = get_observability()
+        with observability.trace(
+            name="ola.rag.retrieve",
+            run_type="chain",
+            metadata=rag_top_level_metadata(
+                endpoint_type="retrieve",
+                internal_run_id=run_id,
                 session_id=request.session_id,
-                goal_id=request.goal_id,
-                learning_status_id=request.learning_status_id,
-                run_id=run_id,
-                db=db,
-            )
-        except Exception as exc:
+                question=request.question,
+            ),
+            tags=["ola", "rag", "retrieve"],
+        ) as span:
             if db is not None:
-                self.run_history.safe_fail(db, run_id, exc)
-            raise
+                self._associate_trace(db, run_id, span, observability)
+            try:
+                state = self.workflow.invoke(
+                    mode="retrieve",
+                    question=request.question,
+                    document_id=request.document_id,
+                    top_k=request.top_k,
+                    source_types=request.source_types,
+                    source_path_prefixes=request.source_path_prefixes,
+                    session_id=request.session_id,
+                    goal_id=request.goal_id,
+                    learning_status_id=request.learning_status_id,
+                    run_id=run_id,
+                    db=db,
+                )
+            except Exception as exc:
+                if db is not None:
+                    self.run_history.safe_fail(db, run_id, exc)
+                raise
+            span.update(rag_result_metadata(state))
+            if db is not None:
+                self.run_history.safe_succeed(db, run_id, state=state)
         if db is not None:
-            self.run_history.safe_succeed(db, run_id, state=state)
+            self._associate_trace(db, run_id, span, observability)
         chunks = [self._to_retrieved_chunk(chunk) for chunk in state.get("context_chunks", [])]
         return RetrieveResponse(
             question=request.question,
@@ -159,6 +213,23 @@ class RagService:
         except Exception as exc:
             logger.warning("Agent run creation failed: error_type=%s", type(exc).__name__)
             return None
+
+    def _associate_trace(self, db: Session, run_id: str | None, span, observability) -> None:
+        status = observability.status()
+        if span.external_trace_id:
+            local_status = "submitted" if span.status == "submitted" else "pending"
+        elif status["enabled"]:
+            local_status = "failed"
+        else:
+            local_status = "disabled"
+        self.run_history.safe_set_observability(
+            db,
+            run_id,
+            provider=status["provider"],
+            external_trace_id=span.external_trace_id,
+            status=local_status,
+            error_code=status["last_error_code"] if local_status == "failed" else None,
+        )
 
     def _to_source_chunk(self, chunk: RetrievedChunk) -> SourceChunk:
         return SourceChunk(
