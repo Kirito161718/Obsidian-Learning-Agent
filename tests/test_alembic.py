@@ -67,3 +67,19 @@ def test_stage6_migration_has_single_expected_revision_and_persistent_checkpoint
     assert 'mysql.DATETIME(fsp=6)' in source
     assert 'sa.Column("created_at", precise_datetime()' in source
     assert 'mysql.MEDIUMBLOB()' in source
+
+
+def test_stage7a_migration_adds_only_nullable_observability_correlation_fields():
+    source = Path(
+        "alembic/versions/20260722_0008_add_langsmith_observability.py"
+    ).read_text(encoding="utf-8")
+    assert 'revision = "20260722_0008"' in source
+    assert 'down_revision = "20260721_0007"' in source
+    for column in (
+        "observability_provider",
+        "external_trace_id",
+        "observability_status",
+        "observability_error_code",
+    ):
+        assert f'Column("{column}"' in source
+    assert "nullable=True" in source

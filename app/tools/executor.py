@@ -10,6 +10,7 @@ from app.tools.audit import ToolAuditService
 from app.tools.definitions import CallerType
 from app.tools.policy import ToolPolicy
 from app.tools.registry import ToolRegistry, get_tool_registry
+from app.observability import get_observability
 
 
 @dataclass(slots=True)
@@ -120,34 +121,64 @@ class ToolExecutor:
 
         self.audit.mark_running(db, audit)
         context = ToolExecutionContext(db=db, services=services or {}, audit_record=audit)
-        try:
-            output = await asyncio.wait_for(
-                self._invoke(definition.callable, parsed_input, context),
-                timeout=definition.timeout_seconds,
-            )
-        except TimeoutError as exc:
-            code = "mcp_timeout" if definition.tool_source == "mcp" else "tool_timeout"
-            self.audit.fail(db, audit, error_code=code, error="Tool execution timed out")
-            raise ToolExecutionError(code, "Tool execution timed out", execution_id=audit.id) from exc
-        except ToolExecutionError as exc:
-            self.audit.fail(db, audit, error_code=exc.code, error=str(exc))
-            raise ToolExecutionError(exc.code, str(exc), execution_id=audit.id, decision=exc.decision) from exc
-        except Exception as exc:
-            self.audit.fail(db, audit, error_code="tool_execution_failed", error=type(exc).__name__)
-            raise ToolExecutionError(
-                "tool_execution_failed", "Tool execution failed", execution_id=audit.id
-            ) from exc
+        observability = get_observability()
+        async with observability.trace_async(
+            name="ola.tool.execute",
+            run_type="tool",
+            metadata={
+                "flow_type": "tool",
+                "internal_run_id": run_id or audit.id,
+                "tool_execution_id": audit.id,
+                "tool_name": definition.name,
+                "tool_source": definition.tool_source,
+                "provider_name": definition.provider_name,
+                "risk_level": definition.risk_level.value,
+                "caller_type": caller.value,
+                "input_char_count": len(parsed_input.model_dump_json()),
+                "status": "running",
+            },
+            tags=["ola", "tool", definition.tool_source, definition.risk_level.value],
+        ) as span:
+            try:
+                output = await asyncio.wait_for(
+                    self._invoke(definition.callable, parsed_input, context),
+                    timeout=definition.timeout_seconds,
+                )
+            except TimeoutError as exc:
+                code = "mcp_timeout" if definition.tool_source == "mcp" else "tool_timeout"
+                self.audit.fail(db, audit, error_code=code, error="Tool execution timed out")
+                span.update({"success": False, "error_code": code})
+                raise ToolExecutionError(code, "Tool execution timed out", execution_id=audit.id) from exc
+            except ToolExecutionError as exc:
+                self.audit.fail(db, audit, error_code=exc.code, error=str(exc))
+                span.update({"success": False, "error_code": exc.code})
+                raise ToolExecutionError(exc.code, str(exc), execution_id=audit.id, decision=exc.decision) from exc
+            except Exception as exc:
+                self.audit.fail(db, audit, error_code="tool_execution_failed", error=type(exc).__name__)
+                span.update({"success": False, "error_code": "tool_execution_failed"})
+                raise ToolExecutionError(
+                    "tool_execution_failed", "Tool execution failed", execution_id=audit.id
+                ) from exc
 
-        try:
-            validated = definition.output_schema.model_validate(output)
-        except ValidationError as exc:
-            self.audit.fail(db, audit, error_code="output_validation_failed", error="Tool output validation failed")
-            raise ToolExecutionError(
-                "output_validation_failed", "Tool output validation failed", execution_id=audit.id
-            ) from exc
-        result = validated.model_dump(mode="json")
-        record = self.audit.succeed(db, audit, result)
-        return result, record
+            try:
+                validated = definition.output_schema.model_validate(output)
+            except ValidationError as exc:
+                self.audit.fail(db, audit, error_code="output_validation_failed", error="Tool output validation failed")
+                span.update({"success": False, "error_code": "output_validation_failed"})
+                raise ToolExecutionError(
+                    "output_validation_failed", "Tool output validation failed", execution_id=audit.id
+                ) from exc
+            result = validated.model_dump(mode="json")
+            record = self.audit.succeed(db, audit, result)
+            span.update(
+                {
+                    "success": True,
+                    "status": "succeeded",
+                    "output_char_count": len(validated.model_dump_json()),
+                    "duration_ms": record.duration_ms,
+                }
+            )
+            return result, record
 
     @staticmethod
     async def _invoke(callable_obj, parsed_input, context: ToolExecutionContext):

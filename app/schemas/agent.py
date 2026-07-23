@@ -79,7 +79,14 @@ class AgentRunOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    run_type: Literal["rag_ask", "rag_retrieve", "session_review"]
+    run_type: Literal[
+        "rag_ask",
+        "rag_retrieve",
+        "session_review",
+        "official_fetch",
+        "official_audit",
+        "official_apply",
+    ]
     session_id: str | None
     status: Literal["running", "succeeded", "failed", "cancelled"]
     question_hash: str | None
@@ -93,6 +100,10 @@ class AgentRunOut(BaseModel):
     model_call_count: int
     tool_call_count: int
     retry_count: int
+    observability_provider: str | None
+    external_trace_id: str | None
+    observability_status: str | None
+    observability_error_code: str | None
     context_manifest: dict[str, Any]
     error_code: str | None
     error_message_preview: str | None
@@ -178,3 +189,17 @@ class CleanupHistoryResponse(BaseModel):
     agent_runs: int
     tool_executions: int
     qa_history_links_cleared: int
+
+
+class ObservabilityStatusOut(BaseModel):
+    provider: str
+    enabled: bool
+    configured: bool
+    safe_mode: bool
+    project_name: str
+    workspace_configured: bool
+    trace_schema_version: str
+    status: str
+    last_success_at: datetime | None
+    last_error_code: str | None
+    dropped_or_failed_count: int

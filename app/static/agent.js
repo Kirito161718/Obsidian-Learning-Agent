@@ -3,6 +3,7 @@
 const el = Object.fromEntries([
   "agentMessage","preferencesForm","preferredLanguage","answerDepth","answerStyle","citationMode","customInstructions",
   "previewSession","previewGoal","previewStatus","previewContextBtn","contextPreviewOutput","refreshRunsBtn","runsBody",
+  "refreshObservabilityBtn","observabilityStatus",
   "refreshToolsBtn","toolsBody","toolTestForm","toolName","toolInput","toolOutput","refreshAuditsBtn","auditsBody",
   "refreshMcpServersBtn","mcpServersBody","refreshMcpToolsBtn","mcpToolsBody","mcpToolTestForm","mcpToolName","mcpToolInput","mcpToolOutput",
   "cleanupDays","cleanupPreviewBtn","cleanupApplyBtn","cleanupOutput"
@@ -42,9 +43,13 @@ async function previewContext() {
   const data=await requestJson("/agent/context/preview",{method:"POST",body:JSON.stringify({session_id:el.previewSession.value||null,goal_id:el.previewGoal.value||null,learning_status_id:el.previewStatus.value||null})});
   el.contextPreviewOutput.textContent=JSON.stringify(data,null,2);
 }
+async function loadObservability() {
+  const data=await requestJson("/agent/observability/status");
+  el.observabilityStatus.textContent=JSON.stringify(data,null,2);
+}
 async function loadRuns() {
   const data=await requestJson("/agent/runs?limit=20");
-  el.runsBody.innerHTML=data.items.length ? data.items.map((x)=>`<tr><td title="${escapeHtml(x.id)}">${escapeHtml(short(x.id))}</td><td>${escapeHtml(x.run_type)}</td><td class="${x.status==='succeeded'?'ok':x.status==='failed'?'bad':''}">${escapeHtml(x.status)}</td><td>${escapeHtml(short(x.session_id))}</td><td>${x.rewrite_applied?'是':'否'}</td><td>${x.retrieved_count}/${x.source_count}</td><td>${x.model_call_count}/${x.tool_call_count}</td><td>${x.duration_ms ?? '-'} ms</td><td>${escapeHtml(x.error_code||'-')}</td><td>${new Date(x.created_at).toLocaleString()}</td></tr>`).join("") : '<tr><td colspan="10" class="muted">暂无运行记录。</td></tr>';
+  el.runsBody.innerHTML=data.items.length ? data.items.map((x)=>`<tr><td title="${escapeHtml(x.id)}">${escapeHtml(short(x.id))}</td><td>${escapeHtml(x.run_type)}</td><td class="${x.status==='succeeded'?'ok':x.status==='failed'?'bad':''}">${escapeHtml(x.status)}</td><td>${escapeHtml(short(x.session_id))}</td><td>${x.rewrite_applied?'是':'否'}</td><td>${x.retrieved_count}/${x.source_count}</td><td>${x.model_call_count}/${x.tool_call_count}</td><td>${escapeHtml(x.observability_provider||'-')}</td><td title="${escapeHtml(x.external_trace_id||'')}">${escapeHtml(short(x.external_trace_id,12))}</td><td>${escapeHtml(x.observability_status||'-')}</td><td>${x.duration_ms ?? '-'} ms</td><td>${escapeHtml(x.error_code||'-')}</td><td>${new Date(x.created_at).toLocaleString()}</td></tr>`).join("") : '<tr><td colspan="13" class="muted">暂无运行记录。</td></tr>';
 }
 async function loadTools() {
   tools=await requestJson("/agent/tools");
@@ -91,10 +96,11 @@ async function guarded(fn) { try { showMessage(""); await fn(); } catch (error) 
 
 el.preferencesForm.addEventListener("submit",(event)=>guarded(()=>savePreferences(event)));
 el.previewContextBtn.addEventListener("click",()=>guarded(previewContext)); el.refreshRunsBtn.addEventListener("click",()=>guarded(loadRuns));
+el.refreshObservabilityBtn.addEventListener("click",()=>guarded(loadObservability));
 el.refreshToolsBtn.addEventListener("click",()=>guarded(loadTools)); el.toolTestForm.addEventListener("submit",(event)=>guarded(()=>executeTool(event)));
 el.refreshMcpServersBtn.addEventListener("click",()=>guarded(loadMcpServers)); el.mcpServersBody.addEventListener("click",(event)=>guarded(()=>mcpServerAction(event)));
 el.refreshMcpToolsBtn.addEventListener("click",()=>guarded(loadMcpTools)); el.mcpToolTestForm.addEventListener("submit",(event)=>guarded(()=>executeMcpTool(event)));
 el.refreshAuditsBtn.addEventListener("click",()=>guarded(loadAudits)); el.cleanupPreviewBtn.addEventListener("click",()=>guarded(()=>cleanup(true)));
 el.cleanupApplyBtn.addEventListener("click",()=>guarded(()=>cleanup(false)));
 
-guarded(async()=>{ await Promise.all([loadPreferences(),loadSelectors(),loadRuns(),loadTools(),loadMcpServers(),loadMcpTools(),loadAudits()]); });
+guarded(async()=>{ await Promise.all([loadPreferences(),loadSelectors(),loadObservability(),loadRuns(),loadTools(),loadMcpServers(),loadMcpTools(),loadAudits()]); });

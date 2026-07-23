@@ -4,6 +4,8 @@ from langgraph.graph import END, START, StateGraph
 from app.core.config import Settings
 from app.graphs.rag_nodes import RagNodes
 from app.graphs.rag_state import RagRuntimeContext, RagState
+from app.observability import get_observability
+from app.observability.decorators import observe_graph_node
 from app.services.context_builder import ContextBuilder
 from app.services.embedding_service import EmbeddingService
 from app.services.llm_service import DeepSeekClient
@@ -35,25 +37,67 @@ class RagWorkflow:
             history_service=QAHistoryService(),
         )
         builder = StateGraph(RagState, context_schema=RagRuntimeContext)
-        builder.add_node("initialize_state", nodes.initialize_state)
-        builder.add_node("load_user_preferences", nodes.load_user_preferences)
-        builder.add_node("load_explicit_learning_context", nodes.load_explicit_learning_context)
-        builder.add_node("load_session_memory", nodes.load_session_memory)
-        builder.add_node("retrieve_original_query", nodes.retrieve_original_query)
-        builder.add_node("assess_retrieval_quality", nodes.assess_retrieval_quality)
-        builder.add_node("rewrite_query", nodes.rewrite_query)
-        builder.add_node("retrieve_rewritten_query", nodes.retrieve_rewritten_query)
-        builder.add_node("merge_results", nodes.merge_results)
-        builder.add_node("expand_links_placeholder", nodes.expand_links_placeholder)
-        builder.add_node("rerank_results", nodes.rerank_results)
-        builder.add_node("build_context", nodes.build_context)
+        builder.add_node("initialize_state", observe_graph_node("ola.rag.load_context", nodes.initialize_state))
+        builder.add_node(
+            "load_user_preferences",
+            observe_graph_node("ola.rag.load_context", nodes.load_user_preferences),
+        )
+        builder.add_node(
+            "load_explicit_learning_context",
+            observe_graph_node("ola.rag.load_context", nodes.load_explicit_learning_context),
+        )
+        builder.add_node(
+            "load_session_memory",
+            observe_graph_node("ola.memory.session.load", nodes.load_session_memory),
+        )
+        builder.add_node(
+            "retrieve_original_query",
+            observe_graph_node("ola.rag.retrieve.original", nodes.retrieve_original_query),
+        )
+        builder.add_node(
+            "assess_retrieval_quality",
+            observe_graph_node("ola.rag.rewrite.decide", nodes.assess_retrieval_quality),
+        )
+        builder.add_node(
+            "rewrite_query",
+            observe_graph_node("ola.rag.rewrite.generate", nodes.rewrite_query),
+        )
+        builder.add_node(
+            "retrieve_rewritten_query",
+            observe_graph_node("ola.rag.retrieve.rewritten", nodes.retrieve_rewritten_query),
+        )
+        builder.add_node(
+            "merge_results",
+            observe_graph_node("ola.rag.retrieve.merge", nodes.merge_results),
+        )
+        builder.add_node(
+            "expand_links_placeholder",
+            observe_graph_node("ola.rag.links.expand", nodes.expand_links_placeholder),
+        )
+        builder.add_node(
+            "rerank_results",
+            observe_graph_node("ola.rag.rerank", nodes.rerank_results),
+        )
+        builder.add_node(
+            "build_context",
+            observe_graph_node("ola.rag.context.build", nodes.build_context),
+        )
         builder.add_node("finalize_retrieval", nodes.finalize_retrieval)
         builder.add_node("check_answerability", nodes.check_answerability)
         builder.add_node("finalize_no_answer", nodes.finalize_no_answer)
         builder.add_node("generate_answer", nodes.generate_answer)
-        builder.add_node("validate_citations", nodes.validate_citations)
-        builder.add_node("basic_evaluate", nodes.basic_evaluate)
-        builder.add_node("save_qa_history", nodes.save_qa_history)
+        builder.add_node(
+            "validate_citations",
+            observe_graph_node("ola.rag.citations.validate", nodes.validate_citations),
+        )
+        builder.add_node(
+            "basic_evaluate",
+            observe_graph_node("ola.rag.basic_evaluate", nodes.basic_evaluate),
+        )
+        builder.add_node(
+            "save_qa_history",
+            observe_graph_node("ola.rag.persist", nodes.save_qa_history),
+        )
 
         builder.add_edge(START, "initialize_state")
         builder.add_edge("initialize_state", "load_user_preferences")
@@ -118,4 +162,5 @@ class RagWorkflow:
             "learning_status_id": learning_status_id,
             "run_id": run_id,
         }
-        return self.graph.invoke(state, context={"db": db})
+        with get_observability().suppress_automatic_tracing():
+            return self.graph.invoke(state, context={"db": db})

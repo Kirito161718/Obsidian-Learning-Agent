@@ -36,9 +36,14 @@
       <pre id="contextPreviewOutput" class="output">尚未预览。</pre>
     </section>
 
+    <section class="panel" id="observabilityPanel">
+      <div class="panel-header"><div><h2>可观测性</h2><p>仅显示安全配置状态与 Trace 关联，不显示密钥、Workspace ID 或输入输出。</p></div><button id="refreshObservabilityBtn" type="button">刷新</button></div>
+      <pre id="observabilityStatus" class="output">正在读取安全状态。</pre>
+    </section>
+
     <section class="panel" id="runHistoryPanel">
       <div class="panel-header"><div><h2>Run History</h2><p>紧凑指标，不保存完整 Prompt、回答或知识上下文。</p></div><button id="refreshRunsBtn" type="button">刷新</button></div>
-      <div class="table-wrap"><table><thead><tr><th>Run</th><th>类型</th><th>状态</th><th>Session</th><th>Rewrite</th><th>召回/来源</th><th>模型/工具</th><th>耗时</th><th>错误</th><th>时间</th></tr></thead><tbody id="runsBody"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>Run</th><th>类型</th><th>状态</th><th>Session</th><th>Rewrite</th><th>召回/来源</th><th>模型/工具</th><th>Observability</th><th>Trace ID</th><th>提交状态</th><th>耗时</th><th>错误</th><th>时间</th></tr></thead><tbody id="runsBody"></tbody></table></div>
     </section>
 
     <section class="panel" id="toolRegistryPanel">

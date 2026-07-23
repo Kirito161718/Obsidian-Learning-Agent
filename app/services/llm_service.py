@@ -4,6 +4,8 @@ import logging
 from openai import OpenAI
 
 from app.core.config import get_settings
+from app.observability import get_observability
+from app.observability.metadata import llm_usage_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -84,15 +86,28 @@ class DeepSeekClient:
                 ),
             },
         ]
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=0.2,
-            )
-        except Exception as exc:
-            self._log_llm_error("generate_answer", exc)
-            raise LLMServiceUnavailable("LLM service is temporarily unavailable") from exc
+        with get_observability().trace(
+            name="ola.llm.deepseek.answer",
+            run_type="llm",
+            metadata={
+                "flow_type": "llm",
+                "ls_provider": "deepseek",
+                "ls_model_name": self.model,
+                "model_name": self.model,
+                "status": "running",
+            },
+            tags=["ola", "llm", "deepseek"],
+        ) as span:
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=0.2,
+                )
+            except Exception as exc:
+                self._log_llm_error("generate_answer", exc)
+                raise LLMServiceUnavailable("LLM service is temporarily unavailable") from exc
+            span.update(llm_usage_metadata(response, model_name=self.model))
         return response.choices[0].message.content or "根据当前知识库资料，无法确定。"
 
     def generate_learning_review(self, payload: dict) -> str:
@@ -131,6 +146,9 @@ class DeepSeekClient:
         except Exception as exc:
             self._log_llm_error("rewrite_query", exc)
             raise LLMServiceUnavailable("LLM service is temporarily unavailable") from exc
+        get_observability().update_current_span(
+            llm_usage_metadata(response, model_name=self.model)
+        )
         return response.choices[0].message.content or question
 
     def generate_official_update_plan(self, payload: dict) -> dict:

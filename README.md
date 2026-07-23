@@ -150,6 +150,13 @@ DELETE /learning-status/{status_id}
 | `NOTE_VERSION_KEEP` | 每篇笔记默认保留的未固定版本数 | `10` |
 | `APPROVAL_EXPIRES_HOURS` | 高风险审批有效小时数 | `24` |
 | `OFFICIAL_CHECKPOINT_ENABLED` | 是否启用 MySQL 审批 Checkpointer | `true` |
+| `LANGSMITH_TRACING` | LangSmith Trace 总开关 | `false` |
+| `LANGSMITH_OBSERVABILITY_ENABLED` | 项目 Observability 适配层开关；未设置时兼容 `LANGSMITH_TRACING` | `false` |
+| `LANGSMITH_PROJECT` | Trace Project | `obsidian-learning-agent` |
+| `LANGSMITH_WORKSPACE_ID` | 多 Workspace Key 的可选目标 Workspace | 空 |
+| `LANGSMITH_SAFE_MODE` | 强制安全观测前置条件 | `true` |
+| `LANGSMITH_HIDE_INPUTS` / `LANGSMITH_HIDE_OUTPUTS` | SDK 全局隐藏输入输出 | `true` |
+| `LANGSMITH_TRACE_SCHEMA_VERSION` | 稳定 Metadata 契约版本 | `ola-trace-v1` |
 
 ## 官方资料校验与审批
 
@@ -162,6 +169,20 @@ DELETE /learning-status/{status_id}
 ```powershell
 python -m app.mcp.server
 ```
+
+## LangSmith 可观测性
+
+阶段 7A 增加可选 LangSmith 全链路 Trace。MySQL `agent_runs` 和 `tool_executions` 仍是本地事实与审计来源；LangSmith 仅用于外部 Trace、调试和后续评估。RAG Ask/Retrieve、Rewrite、Retrieval、Rerank、Context、DeepSeek、Citation、Memory、Tool、MCP 和官方 Fetch/Audit/Approval/Apply/Reindex 均使用稳定 Span 名。
+
+默认安全模式同时使用 SDK 全局隐藏输入输出与项目 Metadata Sanitizer。Trace 不发送完整 Query、Answer、Prompt、Chunk、Memory、Snapshot、Proposal、Diff、Tool/MCP 消息、绝对路径或密钥。LangSmith 关闭、缺 Key、断网或上报失败时业务继续，Shutdown 只做有限 Flush。
+
+安全状态接口：
+
+```http
+GET /agent/observability/status
+```
+
+`/agent` 页面显示启用、配置、Project、Safe Mode、Schema Version、稳定错误码及 Run 的只读 Trace ID；不会显示 API Key 或完整 Workspace ID。完整契约见 [`docs/LANGSMITH_OBSERVABILITY.md`](docs/LANGSMITH_OBSERVABILITY.md)。
 
 ## 7. 本地启动步骤
 

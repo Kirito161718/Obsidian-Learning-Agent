@@ -15,6 +15,7 @@ from app.schemas.agent import (
     CleanupHistoryResponse,
     ContextPreviewRequest,
     ContextPreviewResponse,
+    ObservabilityStatusOut,
     ToolExecutionListResponse,
     ToolExecutionOut,
     ToolExecutionRequest,
@@ -33,6 +34,7 @@ from app.tools.audit import ToolAuditService
 from app.tools.definitions import CallerType, RiskLevel
 from app.tools.executor import ToolExecutionError, ToolExecutor
 from app.tools.registry import get_tool_registry
+from app.observability import get_observability
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 settings = get_settings()
@@ -49,6 +51,11 @@ logger = logging.getLogger(__name__)
 @router.get("", response_class=HTMLResponse, include_in_schema=False)
 def agent_console(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "agent.html")
+
+
+@router.get("/observability/status", response_model=ObservabilityStatusOut)
+def observability_status() -> ObservabilityStatusOut:
+    return ObservabilityStatusOut.model_validate(get_observability().status())
 
 
 @router.get("/preferences", response_model=UserPreferenceOut)

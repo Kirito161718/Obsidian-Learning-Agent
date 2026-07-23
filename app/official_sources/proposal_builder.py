@@ -28,6 +28,7 @@ from app.official_sources.proposal_validator import ProposalPlan, ProposalValida
 from app.official_sources.snapshot_store import SnapshotStore
 from app.security.redaction import safe_text_preview, stable_hash
 from app.services.llm_service import DeepSeekClient
+from app.observability import get_observability
 
 
 class ProposalBuilder:
@@ -77,7 +78,29 @@ class ProposalBuilder:
         previous = snapshots[current_index + 1] if current_index is not None and current_index + 1 < len(snapshots) else None
         current_text = self.snapshot_store.load(snapshot.storage_path)
         previous_text = self.snapshot_store.load(previous.storage_path) if previous else None
-        comparison = self.diff_engine.compare(previous_text, current_text)
+        with get_observability().trace(
+            name="ola.official.snapshot.compare",
+            run_type="chain",
+            metadata={
+                "flow_type": "official_snapshot_compare",
+                "internal_run_id": proposal_id,
+                "official_source_id": source_id,
+                "snapshot_id": snapshot_id,
+                "proposal_id": proposal_id,
+                "previous_snapshot_id": previous.id if previous else None,
+                "status": "running",
+            },
+            tags=["ola", "official", "snapshot-compare"],
+        ) as span:
+            comparison = self.diff_engine.compare(previous_text, current_text)
+            span.update(
+                {
+                    "status": "succeeded",
+                    "baseline": bool(comparison["baseline"]),
+                    "added_line_count": len(comparison["added_lines"]),
+                    "removed_line_count": len(comparison["removed_lines"]),
+                }
+            )
         section_content = sections_with_content(current_text, snapshot.section_manifest)
 
         notes: dict[str, tuple[ObsidianNote, OfficialSourceNoteLink, object]] = {}

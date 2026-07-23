@@ -1,6 +1,6 @@
 # Obsidian Learning Agent 演进与复用说明
 
-> 阶段 3 已实现本地学习工作台与学习闭环；阶段 4 已增加受限 Memory、Context、工具与审计；阶段 5 已增加官方 MCP SDK 的只读端到端接入；阶段 6 已增加公开官方来源的人工校验、审批与版本化写回。使用与边界见 [`LOCAL_LEARNING_WORKSPACE.md`](LOCAL_LEARNING_WORKSPACE.md)、[`MEMORY_CONTEXT_TOOL_FOUNDATION.md`](MEMORY_CONTEXT_TOOL_FOUNDATION.md)、[`READ_ONLY_MCP_INTEGRATION.md`](READ_ONLY_MCP_INTEGRATION.md) 和 [`OFFICIAL_SOURCE_AUDIT_AND_APPROVAL.md`](OFFICIAL_SOURCE_AUDIT_AND_APPROVAL.md)。
+> 阶段 3 已实现本地学习工作台与学习闭环；阶段 4 已增加受限 Memory、Context、工具与审计；阶段 5 已增加官方 MCP SDK 的只读端到端接入；阶段 6 已增加公开官方来源的人工校验、审批与版本化写回；阶段 7A 已增加可选、安全、Fail-open 的 LangSmith 全链路观测。使用与边界见 [`LOCAL_LEARNING_WORKSPACE.md`](LOCAL_LEARNING_WORKSPACE.md)、[`MEMORY_CONTEXT_TOOL_FOUNDATION.md`](MEMORY_CONTEXT_TOOL_FOUNDATION.md)、[`READ_ONLY_MCP_INTEGRATION.md`](READ_ONLY_MCP_INTEGRATION.md)、[`OFFICIAL_SOURCE_AUDIT_AND_APPROVAL.md`](OFFICIAL_SOURCE_AUDIT_AND_APPROVAL.md) 和 [`LANGSMITH_OBSERVABILITY.md`](LANGSMITH_OBSERVABILITY.md)。
 
 ## 当前定位
 
@@ -22,6 +22,7 @@ RAG 主链已经由 LangGraph 编排。`RagService` 作为 API 兼容门面，�
 - `expand_links_placeholder` 节点已预留，但当前只原样传递结果，不执行真实链接扩展。
 - RAG 主链不使用 LangGraph Checkpointer，也不把完整 State 落盘；阶段 6 的独立官方更新审批 Graph 使用 MySQL Checkpointer，但只保存紧凑 ID、Hash 和状态。
 - Ask 与 Retrieve 创建紧凑 Run History；Session Memory 只来自当前 Session 最近问答，且不会成为引用来源。
+- 可选 LangSmith Trace 通过 `internal_run_id` 关联本地 Run；只发送 ID、Hash、计数、状态和耗时，不发送完整 State、Prompt、Query、Answer、Chunk 或 Memory。MySQL Run 仍是事实来源。
 - 用户偏好只能手动修改，Tool 风险只由代码注册表确定；当前模型不会自主调用工具。
 
 阶段 1 已增加单用户学习目标、学习状态和确定性重要指数。这些数据保存在 MySQL 中，只能由用户通过 CRUD 接口或本地管理页面修改，当前不会注入 RAG Context，也不会由模型自动更新。
@@ -51,5 +52,6 @@ source_name = filename
 - Obsidian 内部链接的真实检索和扩展。
 - 自动 Lessons Memory、自动 Reflection；持久化 Checkpointer 仅用于阶段 6 官方更新审批，不用于 RAG 完整 State。
 - Hybrid Search、BM25、任务队列、MCP 写工具、模型自主 MCP 调用和多智能体编排。
+- LangSmith Dataset、Evaluator、在线评估和固定 RAG 测试集；这些属于阶段 7B。
 
 旧项目背景、已有 HTTP 契约和历史部署说明仍保留在 `RAG_PROJECT_HANDOFF.md`，但若其中的独立服务复用建议与本文冲突，以本文为准。

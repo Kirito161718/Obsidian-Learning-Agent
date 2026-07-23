@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+import asyncio
 import logging
 
 from fastapi import FastAPI, Request
@@ -12,6 +13,7 @@ from app.core.config import get_settings
 from app.core.logging import setup_logging
 from app.db.database import init_db
 from app.mcp.client_manager import MCPClientManager
+from app.observability import get_observability
 from app.official_sources.errors import OfficialSourceError
 from app.routers import admin, agent, documents, goals, learning, learning_status, mcp, obsidian, official_sources, qa, rag
 
@@ -31,10 +33,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             if settings.database_required_on_startup:
                 raise
     app.state.mcp_manager = MCPClientManager.from_settings(settings)
+    app.state.observability = get_observability()
     try:
         yield
     finally:
         await app.state.mcp_manager.close_all()
+        await asyncio.to_thread(
+            app.state.observability.flush,
+            settings.langsmith_flush_timeout_seconds,
+        )
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)

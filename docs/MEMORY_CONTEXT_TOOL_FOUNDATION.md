@@ -78,6 +78,8 @@ official_apply
 
 入口在执行前创建 `running` Run，并把其 ID 放入 Graph State。成功后记录状态、Rewrite、召回与来源数、模型/工具/重试次数、Context Manifest 和耗时；失败后记录稳定错误代码、脱敏且截断的错误预览和耗时。
 
+阶段 7A 额外允许 Run 保存 `observability_provider`、`external_trace_id`、`observability_status` 和 `observability_error_code`，并把 `agent_runs.id` 作为 LangSmith 顶层 Trace 的 `internal_run_id`。这些可空字段只是关联信息；LangSmith 不替代 Run History，Trace 失败也不会覆盖业务 `status` 或 `error_code`。
+
 Ask 保存 `qa_history.run_id`；Retrieve 创建 Run 但不生成答案、不写 QA；主动 Session Review 单独创建 Run，不保存 Review Prompt。运行表只保存 SHA-256、最多 200 字符的问题预览和最多 500 字符的错误预览，不保存完整回答、Prompt、知识上下文、Session Memory 或 LangGraph State。
 
 普通 Run 与 Tool Audit 默认保留 10 天，但阶段 4 不增加启动清理、后台任务或定时器。只能显式调用：
@@ -127,6 +129,8 @@ cookie, database_url, dsn
 
 此外会移除 Windows 用户主目录与绝对路径，对输入输出摘要截断，并计算稳定输入 Hash。审计不保存完整 Chunk 列表、完整 QA、完整 Markdown、Token、Authorization Header、数据库 URL 或 Vault 绝对路径。工具返回值被视为外部不可信数据；阶段 4 不会自动把它交给模型。
 
+阶段 7A 的 `ola.memory.session.load` 只记录 Memory 是否启用、消息数、总字符数、截断和是否用于 Rewrite；`ola.tool.execute` 只记录 Tool 名、来源、Provider、风险、Caller、成功状态、耗时、错误码和 `tool_execution_id`。Trace 不复制 Tool Audit 的输入输出摘要，完整 Tool 参数和结果仍不会上报。
+
 ## API 与页面
 
 Agent API 统一使用 `/agent`：
@@ -136,6 +140,7 @@ GET/PATCH /agent/preferences
 POST      /agent/context/preview
 GET       /agent/runs
 GET       /agent/runs/{run_id}
+GET       /agent/observability/status
 GET       /agent/tools
 GET       /agent/tools/{tool_name}
 POST      /agent/tools/{tool_name}/execute

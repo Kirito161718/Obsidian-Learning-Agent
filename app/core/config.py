@@ -1,4 +1,5 @@
 from functools import lru_cache
+import os
 from pathlib import Path
 
 from pydantic import Field, field_validator, model_validator
@@ -117,11 +118,32 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-v4-flash"
 
+    langsmith_tracing: bool = False
+    langsmith_api_key: str = Field(default="", repr=False)
+    langsmith_project: str = "obsidian-learning-agent"
+    langsmith_workspace_id: str | None = Field(default=None, repr=False)
+    langsmith_endpoint: str = "https://api.smith.langchain.com"
+    langsmith_observability_enabled: bool | None = None
+    langsmith_safe_mode: bool = True
+    langsmith_hide_inputs: bool = True
+    langsmith_hide_outputs: bool = True
+    langsmith_trace_schema_version: str = "ola-trace-v1"
+    langsmith_environment: str = "local"
+    langsmith_flush_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
+    langsmith_max_metadata_chars: int = Field(default=10_000, ge=1000, le=100_000)
+    langsmith_max_error_preview_chars: int = Field(default=500, ge=50, le=2000)
+    langsmith_failure_cooldown_seconds: int = Field(default=60, ge=0, le=3600)
+
     model_config = SettingsConfigDict(env_file=BASE_DIR / ".env", env_file_encoding="utf-8", extra="ignore")
 
     @field_validator("obsidian_vault_path", mode="before")
     @classmethod
     def empty_obsidian_path_is_none(cls, value: object) -> object:
+        return None if value is None or str(value).strip() == "" else value
+
+    @field_validator("langsmith_workspace_id", mode="before")
+    @classmethod
+    def empty_workspace_id_is_none(cls, value: object) -> object:
         return None if value is None or str(value).strip() == "" else value
 
     @model_validator(mode="after")
@@ -183,6 +205,15 @@ class Settings(BaseSettings):
         return BASE_DIR / "model_cache"
 
     @property
+    def langsmith_observability_requested(self) -> bool:
+        compatibility_enabled = (
+            self.langsmith_tracing
+            if self.langsmith_observability_enabled is None
+            else self.langsmith_observability_enabled
+        )
+        return bool(self.langsmith_tracing and compatibility_enabled)
+
+    @property
     def database_url(self) -> URL:
         if self.database_url_value:
             return make_url(self.database_url_value)
@@ -227,4 +258,11 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    if settings.langsmith_safe_mode:
+        # Apply the SDK's first privacy layer as soon as settings are loaded.
+        # The explicit Client configuration in app.observability applies the
+        # same protection independently.
+        os.environ["LANGSMITH_HIDE_INPUTS"] = "true"
+        os.environ["LANGSMITH_HIDE_OUTPUTS"] = "true"
+    return settings
