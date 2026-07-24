@@ -193,6 +193,21 @@ def test_run_history_api_filters_and_missing_returns_404(client, db_session):
     assert client.get("/agent/runs", params={"limit": 101}).status_code == 422
 
 
+def test_run_history_api_serializes_profile_activation(client, db_session):
+    service = RunHistoryService()
+    run = service.create(
+        db_session,
+        run_type="rag_profile_activation",
+        mode="activation",
+    )
+    service.succeed(db_session, run.id)
+
+    response = client.get("/agent/runs")
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["run_type"] == "rag_profile_activation"
+
+
 def test_run_history_never_stores_prompt_answer_or_full_question(db_session):
     question = "q" * 400
     run = RunHistoryService().create(db_session, run_type="rag_ask", question=question)

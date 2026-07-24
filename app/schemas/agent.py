@@ -86,6 +86,7 @@ class AgentRunOut(BaseModel):
         "official_fetch",
         "official_audit",
         "official_apply",
+        "rag_profile_activation",
     ]
     session_id: str | None
     status: Literal["running", "succeeded", "failed", "cancelled"]
