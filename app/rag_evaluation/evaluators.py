@@ -46,6 +46,14 @@ def evaluate_output(
                 predicted_answerable=predicted_answerable,
             )
         )
+        expected_policy = case.expected_policy
+        actual_policy = output.metadata.get("answer_policy")
+        if expected_policy is not None:
+            metrics["policy_correct"] = float(
+                expected_policy == actual_policy
+            )
+            metrics["expected_policy"] = expected_policy
+            metrics["answer_policy"] = actual_policy
     metrics.update(
         {
             "answer_point_coverage": (
@@ -86,6 +94,21 @@ def evaluate_output(
             ),
         }
     )
+    for key, value in dict(
+        output.metadata.get("performance_metrics") or {}
+    ).items():
+        if isinstance(value, (int, float, bool)):
+            metrics[f"stage_{key}"] = value
+    for key in (
+        "abstained_before_llm",
+        "uncertainty_answer",
+        "citation_gate_passed",
+        "cold_start",
+        "cache_hit",
+    ):
+        value = output.metadata.get(key)
+        if isinstance(value, (int, float, bool)):
+            metrics[key] = value
     pre_metrics = retrieval_metrics(
         output.pre_rerank,
         case.relevance_judgments,

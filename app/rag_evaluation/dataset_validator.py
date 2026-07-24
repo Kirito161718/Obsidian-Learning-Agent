@@ -30,6 +30,27 @@ class DatasetValidator:
     def validate(self, dataset: EvaluationDataset) -> DatasetValidationResult:
         issues: list[DatasetIssue] = []
         stale_cases: set[str] = set()
+        if dataset.schema_version == "rag-eval-v2":
+            for split in ("calibration", "holdout"):
+                split_cases = [
+                    case for case in dataset.cases if case.safety_split == split
+                ]
+                policies = {case.expected_policy for case in split_cases}
+                for required in (
+                    "answer",
+                    "abstain",
+                    "answer_with_uncertainty",
+                ):
+                    if required not in policies:
+                        issues.append(
+                            DatasetIssue(
+                                case_id=f"split:{split}",
+                                code="safety_split_incomplete",
+                                message=(
+                                    f"{split} split is missing policy {required}"
+                                ),
+                            )
+                        )
         for case in dataset.cases:
             if case.review_status == "stale":
                 stale_cases.add(case.id)

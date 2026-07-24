@@ -179,11 +179,43 @@ class EvaluationRunner:
                                 "pre_rerank_count": len(output.pre_rerank),
                                 "note_count": len(set(note_ids)),
                                 "duplicate_count": len(note_ids) - len(set(note_ids)),
+                                "evidence_features": dict(
+                                    output.metadata.get("evidence_features")
+                                    or {}
+                                ),
+                                "evidence_reason_codes": list(
+                                    output.metadata.get(
+                                        "evidence_reason_codes"
+                                    )
+                                    or []
+                                ),
+                                "performance_metrics": dict(
+                                    output.metadata.get(
+                                        "performance_metrics"
+                                    )
+                                    or {}
+                                ),
                             },
                             answer_stats={
                                 "predicted_answerable": output.answerable,
                                 "citation_count": len(output.citations),
                                 "answer_char_count": len(output.answer or ""),
+                                "answer_policy": output.metadata.get(
+                                    "answer_policy"
+                                ),
+                                "citation_gate_passed": output.metadata.get(
+                                    "citation_gate_passed"
+                                ),
+                                "abstained_before_llm": bool(
+                                    output.metadata.get(
+                                        "abstained_before_llm"
+                                    )
+                                ),
+                                "uncertainty_answer": bool(
+                                    output.metadata.get(
+                                        "uncertainty_answer"
+                                    )
+                                ),
                             },
                             failure_types=failures,
                             internal_run_id=output.internal_run_id,

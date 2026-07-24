@@ -1,5 +1,5 @@
 const $ = (selector) => document.querySelector(selector);
-let snapshot = { datasets: [], experiments: [], profiles: [] };
+let snapshot = { datasets: [], experiments: [], profiles: [], safety: {} };
 
 async function json(url, options) {
   const response = await fetch(url, options);
@@ -146,12 +146,13 @@ function bindActions() {
 async function load() {
   $("#status").textContent = "正在读取评估状态…";
   try {
-    const [datasets, experiments, profiles] = await Promise.all([
+    const [datasets, experiments, profiles, safety] = await Promise.all([
       json("/agent/rag-evaluation/datasets"),
       json("/agent/rag-evaluation/experiments"),
       json("/agent/rag-evaluation/profiles"),
+      json("/agent/rag-evaluation/safety/status"),
     ]);
-    snapshot = { datasets, experiments, profiles };
+    snapshot = { datasets, experiments, profiles, safety };
     const active = profiles.find((item) => item.is_active);
     const baseline = profiles.find((item) => item.is_baseline);
     $("#active-profile").textContent = active?.version || "未设置";
@@ -195,6 +196,36 @@ async function load() {
           ? `<button data-activate-profile="${escapeHtml(item.id)}">激活</button>`
           : ""}
       </div>`).join("");
+    const safetyExperiments = experiments.filter(
+      (item) => item.variant_key.startsWith("rag-safety") ||
+        item.retrieval_profile_version === "rag-safe-v1",
+    );
+    const latestValidation = safetyExperiments
+      .map((item) => item.metric_summary.safety_validation)
+      .find(Boolean);
+    $("#safety-panel").innerHTML = `
+      <div class="card">
+        <span class="tag">${escapeHtml(safety.safe_profile?.promotion_eligible ? "holdout passed" : "not promotable")}</span>
+        <h3>${escapeHtml(safety.dataset_version || "obsidian-real-v2 未注册")}</h3>
+        <p class="meta">${escapeHtml(safety.dataset_case_count || 0)} cases · calibration ${escapeHtml(safety.split_counts?.calibration || 0)} · holdout ${escapeHtml(safety.split_counts?.holdout || 0)}</p>
+        <p>Active Profile：${escapeHtml(safety.active_profile || "未设置")}</p>
+        <p>Safety Profile：${escapeHtml(safety.safe_profile?.version || "尚未通过门禁")}</p>
+      </div>
+      <div class="card">
+        <span class="tag">Holdout gates</span>
+        <h3>安全指标</h3>
+        <p>No-answer Accuracy：${metric(latestValidation?.safety?.no_answer_accuracy)}</p>
+        <p>False Answer Rate：${metric(latestValidation?.safety?.false_answer_rate)}</p>
+        <p>False Refusal Rate：${metric(latestValidation?.safety?.false_refusal_rate)}</p>
+        <p>Answerability Accuracy：${metric(latestValidation?.safety?.answerability_accuracy)}</p>
+      </div>
+      <div class="card">
+        <span class="tag">Cold / Warm</span>
+        <h3>性能保护</h3>
+        <p>Baseline warm p95：${metric(latestValidation?.warm_full_rag_p95?.baseline_ms)} ms</p>
+        <p>Candidate warm p95：${metric(latestValidation?.warm_full_rag_p95?.candidate_ms)} ms</p>
+        <p>模型调用保护：${latestValidation?.model_calls?.passed === true ? "通过" : "待验证"}</p>
+      </div>`;
     bindActions();
     $("#status").textContent = "评估状态已更新。";
   } catch (error) {

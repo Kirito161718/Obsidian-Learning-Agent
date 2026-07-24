@@ -240,11 +240,10 @@ def test_ask_without_results_skips_answer_generation_and_saves_empty_sources(db_
     graph, _, _, _, llm = workflow({question: [], "rewritten query": []})
 
     state = graph.invoke(mode="ask", question=question, document_id=None, top_k=5, db=db_session)
-    history = db_session.query(QAHistory).one()
-
     assert llm.answer_calls == 0
     assert state["context_chunks"] == []
-    assert history.source_chunks == []
+    assert state["answer_policy"] == "abstain"
+    assert db_session.query(QAHistory).count() == 0
 
 
 def test_invalid_citations_are_detected_and_removed(db_session):

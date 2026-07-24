@@ -108,3 +108,14 @@ class CompareRequest(BaseModel):
 
 class CleanupRequest(BaseModel):
     dry_run: bool = True
+
+
+class SafetyCalibrationRequest(BaseModel):
+    dataset_id: str
+    baseline_experiment_id: str
+
+
+class SafetyValidationRequest(BaseModel):
+    dataset_id: str
+    baseline_experiment_id: str
+    candidate_experiment_id: str

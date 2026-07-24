@@ -152,6 +152,99 @@ class RetrievalProfileService:
             )
         return result
 
+    def ensure_safety_candidates(
+        self,
+        db: Session,
+        baseline: RagRetrievalProfile,
+        *,
+        thresholds: dict[str, float],
+        dataset_hash: str,
+        calibration_config_hash: str,
+    ) -> dict[str, RagRetrievalProfile]:
+        baseline_configuration = RetrievalProfileConfiguration.model_validate(
+            baseline.configuration
+        )
+        common = {
+            "evidence_gate_enabled": True,
+            "evidence_feature_version": "evidence-v1",
+            "evidence_thresholds": thresholds,
+            "safety_calibration_dataset_hash": dataset_hash,
+            "safety_calibration_config_hash": calibration_config_hash,
+        }
+        variants = {
+            "S1": baseline_configuration.model_copy(update=common),
+            "S2": baseline_configuration.model_copy(
+                update={
+                    **common,
+                    "safety_prompt_version": "rag-answer-prompt-v2-safety",
+                }
+            ),
+            "S3": baseline_configuration.model_copy(
+                update={
+                    **common,
+                    "safety_prompt_version": "rag-answer-prompt-v2-safety",
+                    "post_citation_gate_enabled": True,
+                }
+            ),
+        }
+        result: dict[str, RagRetrievalProfile] = {}
+        for key, configuration in variants.items():
+            version = f"rag-safety-{key.casefold()}-v1"
+            existing = (
+                db.query(RagRetrievalProfile)
+                .filter(RagRetrievalProfile.version == version)
+                .one_or_none()
+            )
+            if existing is not None:
+                if existing.configuration_hash != configuration.content_hash():
+                    raise ValueError(
+                        f"Safety profile version has different configuration: {version}"
+                    )
+                result[key] = existing
+                continue
+            result[key] = self.create(
+                db,
+                profile_key=f"rag-safety-{key.casefold()}",
+                version=version,
+                description=f"Stage 7E isolated safety candidate {key}.",
+                configuration=configuration,
+            )
+        return result
+
+    def ensure_promotable_safety_profile(
+        self,
+        db: Session,
+        candidate: RagRetrievalProfile,
+    ) -> RagRetrievalProfile:
+        configuration = RetrievalProfileConfiguration.model_validate(
+            candidate.configuration
+        )
+        version = "rag-safe-v1"
+        existing = (
+            db.query(RagRetrievalProfile)
+            .filter(RagRetrievalProfile.version == version)
+            .one_or_none()
+        )
+        profile = existing or self.create(
+            db,
+            profile_key="rag-safe",
+            version=version,
+            description=(
+                "Stage 7E safety profile; activation remains an explicit "
+                "user action and rag-baseline-v1 remains available."
+            ),
+            configuration=configuration,
+        )
+        if profile.configuration_hash != configuration.content_hash():
+            raise ValueError(
+                "Existing rag-safe-v1 has different calibrated configuration"
+            )
+        profile.evaluation_status = "completed"
+        profile.promotion_eligible = True
+        self._commit(db, "Failed to mark safety profile promotable")
+        db.refresh(profile)
+        return profile
+
     def list(self, db: Session) -> list[RagRetrievalProfile]:
         try:
             return (

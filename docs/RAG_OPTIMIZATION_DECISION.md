@@ -1,5 +1,9 @@
 # RAG 优化决策记录
 
+## 阶段 7E 决策边界
+
+阶段 7D 的检索候选没有晋级，阶段 7E 因而不继续扩大检索技术实验。当前阻塞问题是 no-answer 误答，候选只允许增加确定性证据门、安全 Prompt 和生成后引用门。`rag-baseline-v1` 不被覆盖；只有独立 holdout 全部门禁通过后才创建 `rag-safe-v1`，且仍需用户明确激活。
+
 ## 决策范围与数据边界
 
 本记录覆盖阶段 7B、7C、7D。所有候选都来自固定数据集上的 Baseline 失败证据；没有修改正式 Vault，也没有覆盖生产 Qdrant Collection。
@@ -121,3 +125,9 @@ Chunk V2 的 NDCG 相对 Baseline 只增加 0.0049，Link V2 反而下降 0.0017
 Profile 激活必须经过显式确认 API，评测脚本不会自动激活。未来若有候选通过并被人工激活，其 `rollback_profile_id` 必须指向 `rag-baseline-v1`；回滚只重新激活基线，不删除 Shadow、不修改 Vault、不回写 QA History。
 
 下一轮优化应先修复 answerability/no-answer 判定，再基于新的固定数据集版本重新做 7B 式基线和候选门禁。需要重建索引时，先在新的 `rag_eval_*` Collection 完整构建与验证，禁止原位重建 `rag_chunks`，禁止同一实验混用两个 Collection。
+
+## 阶段 7E 决策
+
+阶段 7E 使用 43-Case 私有固定数据集完成 Calibration 与独立 Holdout。S0 的无答案类 No-answer Accuracy 为 0、False Answer Rate 为 1；Evidence Gate 将两项分别修复为 1 和 0。S2（Evidence Gate + Safety Prompt）通过安全、质量、性能和模型调用门禁；S3 的 Post Citation Gate 导致回答型问题 False Refusal Rate 0.2917，超过 0.10 门禁，因此拒绝。
+
+最终创建 `rag-safe-v1`，采用 S2 配置且保持未激活。生产 Active Profile 仍为 `rag-baseline-v1`，由用户在手动测试后显式激活或保持基线。阶段 7E 没有修改 Vault、生产 Collection、QA History 或 Learning Session；没有向 LangSmith 上传 v2 真实 Case。

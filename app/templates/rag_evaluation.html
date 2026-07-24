@@ -54,6 +54,20 @@
       </div>
       <div id="profiles" class="cards"></div>
     </section>
+    <section aria-labelledby="safety-heading">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Stage 7E Safety</p>
+          <h2 id="safety-heading">拒答安全与性能</h2>
+        </div>
+      </div>
+      <div id="safety-panel" class="cards" aria-live="polite">
+        <p>正在读取安全状态…</p>
+      </div>
+      <p class="meta">
+        阈值只由 calibration 生成，holdout 只用于最终验证；页面不提供手工填写生产阈值，也不会自动激活候选 Profile。
+      </p>
+    </section>
     <p id="status" role="status"></p>
   </main>
   <script src="/static/rag_evaluation.js" defer></script>

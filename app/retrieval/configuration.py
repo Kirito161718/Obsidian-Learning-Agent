@@ -40,6 +40,15 @@ class RetrievalProfileConfiguration(BaseModel):
     embedding_model: str = "BAAI/bge-m3"
     rerank_model: str = "BAAI/bge-reranker-v2-m3"
     prompt_version: str = "rag-system-v1"
+    evidence_gate_enabled: bool = False
+    evidence_feature_version: str = "evidence-v1"
+    evidence_thresholds: dict[str, float] = Field(default_factory=dict)
+    safety_prompt_version: str = "rag-system-v1"
+    post_citation_gate_enabled: bool = False
+    safety_calibration_dataset_hash: str | None = None
+    safety_calibration_config_hash: str | None = None
+    prewarm_enabled: bool = False
+    query_cache_enabled: bool = False
 
     @model_validator(mode="after")
     def validate_compatible_controls(self) -> "RetrievalProfileConfiguration":
@@ -49,6 +58,15 @@ class RetrievalProfileConfiguration(BaseModel):
             raise ValueError("retrieval_mode='hybrid' requires hybrid_enabled")
         if self.rerank_top_k < self.final_top_k and self.rerank_enabled:
             raise ValueError("rerank_top_k cannot be smaller than final_top_k")
+        allowed_thresholds = {
+            "min_top_score",
+            "min_mean_score",
+            "min_context_chars",
+            "min_valid_sources",
+            "min_retrieval_agreement",
+        }
+        if set(self.evidence_thresholds) - allowed_thresholds:
+            raise ValueError("Unsupported evidence threshold")
         return self
 
     @classmethod

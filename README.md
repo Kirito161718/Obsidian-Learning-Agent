@@ -186,7 +186,7 @@ GET /agent/observability/status
 
 ## RAG 固定评估
 
-项目提供本地固定数据集、确定性检索/引用/拒答指标、隔离 Retrieval Profile、可恢复实验、LangSmith 安全子集和脱敏报告。高级页面为 `/agent/rag-evaluation`；真实数据集默认被 Git 忽略，评估不会写入 QA History 或最近会话。阶段 7B～7D 已按 Baseline → 隔离候选 → 三轮 Retrieval/Full RAG 门禁执行；Chunk V2 与 Link V2 均因主提升和 no-answer 安全门禁失败而未晋级，生产仍使用 `rag-baseline-v1`。
+项目提供本地固定数据集、确定性检索/引用/拒答指标、隔离 Retrieval Profile、可恢复实验、LangSmith 安全子集和脱敏报告。高级页面为 `/agent/rag-evaluation`；真实数据集默认被 Git 忽略，评估不会写入 QA History 或最近会话。阶段 7B～7D 已按 Baseline → 隔离候选 → 三轮 Retrieval/Full RAG 门禁执行；阶段 7E 进一步增加 `obsidian-real-v2` 的 calibration/holdout、Evidence Sufficiency Gate、Answer/Abstain/Uncertainty 策略、Post Citation Gate 和冷/热性能剖析。安全候选只有通过独立 holdout 才能创建 `rag-safe-v1`，且不会自动激活；`rag-baseline-v1` 始终保留用于回滚。
 
 ```powershell
 python -m app.rag_evaluation.cli validate-dataset --file obsidian-real-v1.yaml

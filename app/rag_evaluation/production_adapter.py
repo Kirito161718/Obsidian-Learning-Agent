@@ -13,7 +13,7 @@ from app.rag_evaluation.schemas import (
 from app.retrieval.configuration import RetrievalProfileConfiguration
 from app.services.embedding_service import get_embedding_service
 from app.services.llm_service import DeepSeekClient
-from app.services.rerank_service import RerankService
+from app.services.rerank_service import RerankService, get_rerank_service
 from app.services.vector_service import VectorService
 
 
@@ -26,6 +26,7 @@ class ProductionRagEvaluationAdapter:
         self._llm_client = None
         self._workflows: dict[str, RagWorkflow] = {}
         self._rerank_services: dict[tuple[bool, str], RerankService] = {}
+        self._invocation_count = 0
 
     def __call__(
         self,
@@ -34,7 +35,16 @@ class ProductionRagEvaluationAdapter:
         mode: str,
     ) -> EvaluationRunOutput:
         started = time.perf_counter()
+        cold_start = self._invocation_count == 0
+        self._invocation_count += 1
+        embedding_started = time.perf_counter()
+        embedding_cold = self._embedding_service is None
         embedding_service = self._embedding_service or get_embedding_service()
+        embedding_initialization_ms = (
+            (time.perf_counter() - embedding_started) * 1000
+            if embedding_cold
+            else 0.0
+        )
         self._embedding_service = embedding_service
         llm_client = self._llm_client or DeepSeekClient()
         self._llm_client = llm_client
@@ -54,7 +64,7 @@ class ProductionRagEvaluationAdapter:
             rerank_key = (profile.rerank_enabled, profile.rerank_model)
             rerank_service = self._rerank_services.get(rerank_key)
             if rerank_service is None:
-                rerank_service = RerankService(
+                rerank_service = get_rerank_service(
                     enabled=profile.rerank_enabled,
                     model_name=profile.rerank_model,
                 )
@@ -118,6 +128,13 @@ class ProductionRagEvaluationAdapter:
         total_ms = (time.perf_counter() - started) * 1000
         evaluation = state.get("evaluation_result") or {}
         manifest = state.get("context_manifest") or {}
+        performance = dict(state.get("performance_metrics") or {})
+        state["cold_start"] = cold_start
+        performance["cold_start"] = cold_start
+        performance["embedding_initialization_ms"] = (
+            embedding_initialization_ms
+        )
+        performance["total_ms"] = total_ms
         return EvaluationRunOutput(
             retrieved=retrieved,
             pre_rerank=pre_rerank,
@@ -144,5 +161,28 @@ class ProductionRagEvaluationAdapter:
                 "citation_validation_passed": not bool(
                     evaluation.get("invalid_citations")
                 ),
+                "answer_policy": state.get("answer_policy"),
+                "evidence_confidence_band": state.get(
+                    "evidence_confidence_band"
+                ),
+                "evidence_reason_codes": list(
+                    state.get("evidence_reason_codes") or []
+                ),
+                "evidence_feature_version": state.get(
+                    "evidence_feature_version"
+                ),
+                "evidence_features": dict(
+                    state.get("evidence_features") or {}
+                ),
+                "citation_gate_passed": state.get("citation_gate_passed"),
+                "abstained_before_llm": bool(
+                    state.get("abstained_before_llm")
+                ),
+                "uncertainty_answer": bool(
+                    state.get("uncertainty_answer")
+                ),
+                "cold_start": bool(state.get("cold_start")),
+                "cache_hit": bool(state.get("cache_hit")),
+                "performance_metrics": performance,
             },
         )

@@ -17,6 +17,10 @@ from app.observability import get_observability
 from app.official_sources.errors import OfficialSourceError
 from app.routers import admin, agent, documents, goals, learning, learning_status, mcp, obsidian, official_sources, qa, rag, rag_evaluation
 from app.services.crud_errors import ResourceNotFoundError, ServiceDatabaseError
+from app.services.rag_model_runtime import (
+    prewarm_rag_models,
+    rag_model_runtime_status,
+)
 
 setup_logging()
 settings = get_settings()
@@ -35,6 +39,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 raise
     app.state.mcp_manager = MCPClientManager.from_settings(settings)
     app.state.observability = get_observability()
+    if (
+        settings.rag_model_prewarm_enabled
+        and settings.rag_model_prewarm_on_startup
+    ):
+        await asyncio.to_thread(prewarm_rag_models, settings)
     try:
         yield
     finally:
@@ -52,6 +61,11 @@ app.mount("/static", StaticFiles(directory=settings.static_dir), name="static")
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/health/rag")
+def rag_health() -> dict:
+    return {"status": "ok", "model_runtime": rag_model_runtime_status()}
 
 
 @app.exception_handler(OfficialSourceError)

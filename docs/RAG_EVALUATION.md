@@ -1,5 +1,9 @@
 # RAG 固定评估与实验
 
+> 阶段 7E 在现有评估框架上增加 `obsidian-real-v2`、calibration/holdout、
+> Answer/Abstain/Uncertainty 策略及冷/热性能剖析。详细设计和门禁见
+> [RAG_SAFETY_AND_PERFORMANCE.md](RAG_SAFETY_AND_PERFORMANCE.md)。
+
 ## 事实来源与隐私边界
 
 本地 YAML 数据集是评估事实来源。MySQL 只保存数据集版本、相对路径、Hash、计数、实验配置、聚合指标和 Case ID，不保存完整问题、答案、Prompt、Context 或 Chunk。真实数据集位于 `data/rag_evaluation/datasets/`，默认被 Git 忽略；仓库只提交 Schema、示例和测试 Fixture。

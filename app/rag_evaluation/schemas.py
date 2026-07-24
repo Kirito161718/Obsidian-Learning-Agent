@@ -14,6 +14,8 @@ CaseCategory = Literal[
     "conflicting_sources",
 ]
 ReviewStatus = Literal["draft", "reviewed", "stale"]
+SafetySplit = Literal["calibration", "holdout"]
+ExpectedPolicy = Literal["answer", "abstain", "answer_with_uncertainty"]
 
 
 class ConversationTurn(BaseModel):
@@ -57,6 +59,8 @@ class EvaluationCase(BaseModel):
     tags: list[str] = Field(default_factory=list, max_length=50)
     share_with_langsmith: bool = False
     review_status: ReviewStatus = "draft"
+    safety_split: SafetySplit | None = None
+    expected_policy: ExpectedPolicy | None = None
 
     @field_validator(
         "expected_answer_points",
@@ -92,13 +96,17 @@ class EvaluationCase(BaseModel):
             raise ValueError("A citation cannot be both acceptable and forbidden")
         if self.requires_rewrite and not self.conversation_context:
             raise ValueError("Rewrite cases require conversation_context")
+        if self.expected_policy == "abstain" and self.should_answer:
+            raise ValueError("Abstain cases cannot be marked answerable")
+        if self.expected_policy in {"answer", "answer_with_uncertainty"} and not self.should_answer:
+            raise ValueError("Answer policies require should_answer=true")
         return self
 
 
 class EvaluationDataset(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["rag-eval-v1"] = "rag-eval-v1"
+    schema_version: Literal["rag-eval-v1", "rag-eval-v2"] = "rag-eval-v1"
     name: str = Field(min_length=1, max_length=150)
     version: str = Field(min_length=1, max_length=80)
     description: str | None = Field(default=None, max_length=2000)
@@ -109,6 +117,14 @@ class EvaluationDataset(BaseModel):
         ids = [case.id for case in self.cases]
         if len(ids) != len(set(ids)):
             raise ValueError("Dataset case IDs must be unique")
+        if self.schema_version == "rag-eval-v2":
+            if any(
+                case.safety_split is None or case.expected_policy is None
+                for case in self.cases
+            ):
+                raise ValueError(
+                    "rag-eval-v2 cases require safety_split and expected_policy"
+                )
         return self
 
 

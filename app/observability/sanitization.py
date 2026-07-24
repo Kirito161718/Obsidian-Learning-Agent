@@ -45,12 +45,15 @@ _BLOCKED_KEYS = {
 }
 _SAFE_EXACT_STRING_KEYS = {
     "app_name",
+    "answer_policy",
     "caller_type",
     "checkpoint_thread_id",
     "citation_mode_enum",
     "depth_enum",
     "endpoint_type",
     "environment",
+    "evidence_confidence_band",
+    "evidence_reason_codes",
     "finish_reason",
     "flow_type",
     "language",

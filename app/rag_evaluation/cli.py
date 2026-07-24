@@ -72,7 +72,11 @@ def main(argv: list[str] | None = None) -> int:
     with SessionLocal() as db:
         if args.command == "build-dataset":
             builder = RealDatasetBuilder(settings)
-            dataset = builder.build(db)
+            dataset = (
+                builder.build_v2(db)
+                if Path(args.file).stem == "obsidian-real-v2"
+                else builder.build(db)
+            )
             path = builder.write(dataset, file_name=args.file, overwrite=args.force)
             print(
                 json.dumps(

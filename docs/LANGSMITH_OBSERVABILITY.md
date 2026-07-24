@@ -1,5 +1,11 @@
 # LangSmith 全链路观测
 
+## 阶段 7E 安全 Metadata
+
+RAG Trace 新增 `answer_policy`、`evidence_confidence_band`、`evidence_reason_codes`、`evidence_feature_version`、`citation_gate_passed`、`abstained_before_llm`、`uncertainty_answer`、`cold_start` 和 `cache_hit`。对应 Span 为 `ola.rag.evidence.evaluate`、`ola.rag.answer_policy.route`、`ola.rag.safety.enforce` 和 `ola.rag.performance.prewarm`。
+
+这些字段只包含枚举、原因码、布尔值和数值统计。Query、Answer、Context、Note 路径和私有阈值对应的 Case 内容仍由脱敏层阻止；`obsidian-real-v2` 所有 Case 都禁止同步。LangSmith 失败继续保持 fail-open，不能改变拒答决策。
+
 ## 定位与事实来源
 
 阶段 7A 把 LangSmith 作为可选的外部 Trace、调试和后续评估平台。MySQL `agent_runs`、`tool_executions`、Approval Audit、Note Version、本地错误日志和 MySQL Checkpointer 仍是本地运行事实与审计来源。关闭、误配或无法访问 LangSmith 不会跳过这些本地记录，也不会改变 RAG、Tool、MCP、审批或写回语义。

@@ -68,6 +68,8 @@ class Settings(BaseSettings):
     rag_promotion_max_no_answer_drop: float = Field(default=0.02, ge=0, le=1)
     rag_promotion_max_p95_latency_increase_ratio: float = Field(default=0.20, ge=0, le=10)
     rag_retrieval_profile_version: str = "rag-baseline-v1"
+    rag_model_prewarm_enabled: bool = False
+    rag_model_prewarm_on_startup: bool = False
     learning_session_review_max_qa: int = Field(default=20, ge=1, le=100)
 
     session_memory_enabled: bool = True

@@ -51,6 +51,17 @@ class RagState(TypedDict, total=False):
     rerank_latency_ms: float
     llm_latency_ms: float
     answerable: bool
+    answer_policy: str
+    evidence_confidence_band: str
+    evidence_reason_codes: list[str]
+    evidence_feature_version: str
+    evidence_features: dict
+    abstained_before_llm: bool
+    uncertainty_answer: bool
+    citation_gate_passed: bool
+    cold_start: bool
+    cache_hit: bool
+    performance_metrics: dict[str, float | bool]
     error_code: str | None
     error_message: str | None
 
