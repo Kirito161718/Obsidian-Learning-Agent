@@ -1,5 +1,11 @@
 # LangSmith 全链路观测
 
+## 阶段 7E 安全 Metadata
+
+RAG Trace 新增 `answer_policy`、`evidence_confidence_band`、`evidence_reason_codes`、`evidence_feature_version`、`citation_gate_passed`、`abstained_before_llm`、`uncertainty_answer`、`cold_start` 和 `cache_hit`。对应 Span 为 `ola.rag.evidence.evaluate`、`ola.rag.answer_policy.route`、`ola.rag.safety.enforce` 和 `ola.rag.performance.prewarm`。
+
+这些字段只包含枚举、原因码、布尔值和数值统计。Query、Answer、Context、Note 路径和私有阈值对应的 Case 内容仍由脱敏层阻止；`obsidian-real-v2` 所有 Case 都禁止同步。LangSmith 失败继续保持 fail-open，不能改变拒答决策。
+
 ## 定位与事实来源
 
 阶段 7A 把 LangSmith 作为可选的外部 Trace、调试和后续评估平台。MySQL `agent_runs`、`tool_executions`、Approval Audit、Note Version、本地错误日志和 MySQL Checkpointer 仍是本地运行事实与审计来源。关闭、误配或无法访问 LangSmith 不会跳过这些本地记录，也不会改变 RAG、Tool、MCP、审批或写回语义。
@@ -165,7 +171,9 @@ GET /agent/observability/status
 
 ## 当前范围
 
-阶段 7A 只建立观测基线，没有 LangSmith Dataset、Evaluator、在线评估、固定测试集或 RAG 算法优化。阶段 7B 将建立固定测试集和离线 Retrieval/Answer Evaluation。
+阶段 7A 建立生产观测基线。阶段 7B 在不改变上述 Safe Trace 契约的前提下增加固定本地数据集、离线 Retrieval/Answer Evaluation 和 LangSmith 安全子集。只有明确标记 `share_with_langsmith=true` 且已审阅、未 stale 的 Case 会同步；本地数据集与本地报告仍是事实来源。发布失败不会重跑 RAG Case。
+
+阶段 7C/7D 的候选初筛与最终三轮复测不扩大上传范围。最终 Baseline、Chunk V2、Link V2 的 Retrieval-only 与 Full RAG 实验都使用 `--no-langsmith`，外部观测限流或失败不影响本地逐 Case 持久化、精确恢复和最终决策。完整说明见 [`RAG_EVALUATION.md`](RAG_EVALUATION.md)，最终决策见 [`RAG_OPTIMIZATION_DECISION.md`](RAG_OPTIMIZATION_DECISION.md)。
 
 官方参考：
 

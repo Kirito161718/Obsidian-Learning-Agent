@@ -3,6 +3,7 @@ import logging
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.db.models import RagRetrievalProfile
 from app.domain.retrieved_chunk import RetrievedChunk
 from app.graphs.rag_graph import RagWorkflow
 from app.graphs.rag_nodes import NO_CONTEXT_ANSWER
@@ -23,6 +24,7 @@ from app.services.llm_service import DeepSeekClient
 from app.services.rerank_service import RerankService
 from app.services.run_history_service import RunHistoryService
 from app.services.vector_service import VectorService
+from app.retrieval.configuration import RetrievalProfileConfiguration
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +94,7 @@ class RagService:
                     learning_status_id=request.learning_status_id,
                     run_id=run_id,
                     db=db,
+                    retrieval_profile=self._active_profile(db),
                 )
             except Exception as exc:
                 self.run_history.safe_fail(db, run_id, exc)
@@ -173,6 +176,7 @@ class RagService:
                     learning_status_id=request.learning_status_id,
                     run_id=run_id,
                     db=db,
+                    retrieval_profile=self._active_profile(db),
                 )
             except Exception as exc:
                 if db is not None:
@@ -197,6 +201,29 @@ class RagService:
             run_id=run_id,
             context_manifest=state.get("context_manifest") or {},
         )
+
+    @staticmethod
+    def _active_profile(db: Session | None) -> dict:
+        if db is None:
+            return {}
+        try:
+            row = (
+                db.query(RagRetrievalProfile)
+                .filter(RagRetrievalProfile.is_active.is_(True))
+                .one_or_none()
+            )
+            if row is None:
+                return {}
+            return RetrievalProfileConfiguration.model_validate(
+                row.configuration
+            ).canonical_dict()
+        except Exception as exc:
+            logger.warning(
+                "Active retrieval profile unavailable; using runtime baseline: "
+                "error_type=%s",
+                type(exc).__name__,
+            )
+            return {}
 
     def _create_run(self, db: Session, run_type: str, request: AskRequest) -> str | None:
         try:

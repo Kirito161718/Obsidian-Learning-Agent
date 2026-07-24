@@ -61,6 +61,23 @@ def rag_result_metadata(state: dict[str, Any]) -> dict[str, Any]:
         "error_code": state.get("error_code"),
         "status": "succeeded",
         "source_count": len(sources),
+        "answer_policy": state.get("answer_policy"),
+        "evidence_confidence_band": state.get(
+            "evidence_confidence_band"
+        ),
+        "evidence_reason_codes": list(
+            state.get("evidence_reason_codes") or []
+        ),
+        "evidence_feature_version": state.get(
+            "evidence_feature_version"
+        ),
+        "citation_gate_passed": state.get("citation_gate_passed"),
+        "abstained_before_llm": bool(
+            state.get("abstained_before_llm")
+        ),
+        "uncertainty_answer": bool(state.get("uncertainty_answer")),
+        "cold_start": bool(state.get("cold_start")),
+        "cache_hit": bool(state.get("cache_hit")),
     }
 
 
@@ -167,6 +184,34 @@ def rag_node_metadata(
             {
                 "citation_count": len(combined.get("citations") or []),
                 "citation_validation_passed": not bool(invalid),
+            }
+        )
+    if span_name in {
+        "ola.rag.evidence.evaluate",
+        "ola.rag.answer_policy.route",
+        "ola.rag.safety.enforce",
+    }:
+        base.update(
+            {
+                "answer_policy": combined.get("answer_policy"),
+                "evidence_confidence_band": combined.get(
+                    "evidence_confidence_band"
+                ),
+                "evidence_reason_codes": list(
+                    combined.get("evidence_reason_codes") or []
+                ),
+                "evidence_feature_version": combined.get(
+                    "evidence_feature_version"
+                ),
+                "citation_gate_passed": combined.get(
+                    "citation_gate_passed"
+                ),
+                "abstained_before_llm": bool(
+                    combined.get("abstained_before_llm")
+                ),
+                "uncertainty_answer": bool(
+                    combined.get("uncertainty_answer")
+                ),
             }
         )
     return base

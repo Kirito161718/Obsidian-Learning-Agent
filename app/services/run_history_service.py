@@ -18,6 +18,7 @@ RUN_TYPES = {
     "official_fetch",
     "official_audit",
     "official_apply",
+    "rag_profile_activation",
 }
 RUN_STATUSES = {"running", "succeeded", "failed", "cancelled"}
 OBSERVABILITY_STATUSES = {"disabled", "pending", "submitted", "failed"}

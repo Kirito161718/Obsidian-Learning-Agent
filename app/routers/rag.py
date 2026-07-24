@@ -11,7 +11,7 @@ from app.services.embedding_service import get_embedding_service
 from app.services.llm_service import DeepSeekClient, LLMServiceUnavailable
 from app.services.crud_errors import ResourceNotFoundError
 from app.services.rag_service import RagService
-from app.services.rerank_service import RerankService
+from app.services.rerank_service import get_rerank_service
 from app.services.vector_service import VectorService
 
 router = APIRouter(prefix="/rag", tags=["rag"])
@@ -26,7 +26,7 @@ def get_rag_service() -> RagService:
     return RagService(
         embedding_service=embedding_service,
         vector_service=VectorService(vector_size=embedding_service.vector_size),
-        rerank_service=RerankService(),
+        rerank_service=get_rerank_service(),
         llm_client=DeepSeekClient(),
     )
 

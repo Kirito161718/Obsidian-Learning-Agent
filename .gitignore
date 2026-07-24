@@ -24,5 +24,10 @@ data/migration_backup/
 data/official_sources/
 data/update_proposals/
 data/note_versions/
+data/rag_evaluation/datasets/*
+data/rag_evaluation/experiment_artifacts/*
+!data/rag_evaluation/datasets/.gitkeep
+!data/rag_evaluation/datasets/example.dataset.yaml
+!data/rag_evaluation/experiment_artifacts/.gitkeep
 *.log
 *.tmp

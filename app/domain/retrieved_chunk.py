@@ -33,6 +33,7 @@ class RetrievedChunk(BaseModel):
         chunk_index = int(raw_chunk_index) if raw_chunk_index is not None else 0
         chunk_id = str(payload.get("chunk_id") or f"{source_id}_{chunk_index}")
         metadata = dict(payload.get("metadata") or {})
+        metadata.update(payload.get("chunk_metadata") or {})
         if payload.get("filename") is not None:
             metadata.setdefault("filename", payload["filename"])
         if payload.get("file_type") is not None:
@@ -48,6 +49,10 @@ class RetrievedChunk(BaseModel):
             "tags",
             "links",
             "note_hash",
+            "chunking_version",
+            "structural_id",
+            "previous_sibling_id",
+            "next_sibling_id",
         ):
             if payload.get(key) is not None:
                 metadata.setdefault(key, payload[key])
@@ -94,6 +99,10 @@ class RetrievedChunk(BaseModel):
             "tags",
             "links",
             "note_hash",
+            "chunking_version",
+            "structural_id",
+            "previous_sibling_id",
+            "next_sibling_id",
         ):
             if self.metadata.get(key) is not None:
                 payload[key] = self.metadata[key]

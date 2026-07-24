@@ -1,5 +1,8 @@
 import logging
+import time
+from functools import lru_cache
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 from app.core.config import BASE_DIR, get_settings
@@ -19,6 +22,8 @@ class RerankService:
         self._reranker: Any | None = None
         self._backend: str | None = None
         self._load_attempted = False
+        self._load_lock = Lock()
+        self._initialization_ms = 0.0
         logger.info("Rerank enabled=%s, model=%s", self.enabled, self.model_name)
 
     def rerank(self, query: str, chunks: list[dict], top_n: int | None = None) -> list[dict]:
@@ -69,8 +74,30 @@ class RerankService:
     def _get_reranker(self) -> Any | None:
         if self._load_attempted:
             return self._reranker
+        with self._load_lock:
+            if self._load_attempted:
+                return self._reranker
+            self._load_attempted = True
+            started = time.perf_counter()
+            try:
+                return self._load_reranker()
+            finally:
+                self._initialization_ms = (
+                    time.perf_counter() - started
+                ) * 1000
 
-        self._load_attempted = True
+    def prewarm(self) -> bool:
+        if not self.enabled:
+            return True
+        return self._get_reranker() is not None
+
+    def consume_initialization_ms(self) -> float:
+        with self._load_lock:
+            value = self._initialization_ms
+            self._initialization_ms = 0.0
+            return value
+
+    def _load_reranker(self) -> Any | None:
         model = self._model_name_or_path()
 
         try:
@@ -129,3 +156,11 @@ class RerankService:
             return str(payload["text"])
 
         return ""
+
+
+@lru_cache
+def get_rerank_service(
+    enabled: bool | None = None,
+    model_name: str | None = None,
+) -> RerankService:
+    return RerankService(enabled=enabled, model_name=model_name)

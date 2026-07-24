@@ -15,7 +15,12 @@ from app.db.database import init_db
 from app.mcp.client_manager import MCPClientManager
 from app.observability import get_observability
 from app.official_sources.errors import OfficialSourceError
-from app.routers import admin, agent, documents, goals, learning, learning_status, mcp, obsidian, official_sources, qa, rag
+from app.routers import admin, agent, documents, goals, learning, learning_status, mcp, obsidian, official_sources, qa, rag, rag_evaluation
+from app.services.crud_errors import ResourceNotFoundError, ServiceDatabaseError
+from app.services.rag_model_runtime import (
+    prewarm_rag_models,
+    rag_model_runtime_status,
+)
 
 setup_logging()
 settings = get_settings()
@@ -34,6 +39,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 raise
     app.state.mcp_manager = MCPClientManager.from_settings(settings)
     app.state.observability = get_observability()
+    if (
+        settings.rag_model_prewarm_enabled
+        and settings.rag_model_prewarm_on_startup
+    ):
+        await asyncio.to_thread(prewarm_rag_models, settings)
     try:
         yield
     finally:
@@ -51,6 +61,11 @@ app.mount("/static", StaticFiles(directory=settings.static_dir), name="static")
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/health/rag")
+def rag_health() -> dict:
+    return {"status": "ok", "model_runtime": rag_model_runtime_status()}
 
 
 @app.exception_handler(OfficialSourceError)
@@ -72,6 +87,22 @@ async def request_validation_error_handler(request: Request, exc: RequestValidat
     return JSONResponse(status_code=422, content={"detail": errors})
 
 
+@app.exception_handler(ResourceNotFoundError)
+async def resource_not_found_handler(
+    request: Request, exc: ResourceNotFoundError
+) -> JSONResponse:
+    del request
+    return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+
+@app.exception_handler(ServiceDatabaseError)
+async def service_database_error_handler(
+    request: Request, exc: ServiceDatabaseError
+) -> JSONResponse:
+    del request
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+
 app.include_router(documents.router)
 app.include_router(rag.router)
 app.include_router(qa.router)
@@ -82,4 +113,5 @@ app.include_router(official_sources.router)
 app.include_router(learning.router)
 app.include_router(admin.router)
 app.include_router(agent.router)
+app.include_router(rag_evaluation.router)
 app.include_router(mcp.router)

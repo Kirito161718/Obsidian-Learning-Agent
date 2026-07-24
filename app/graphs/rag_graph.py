@@ -1,5 +1,7 @@
-from sqlalchemy.orm import Session
 from langgraph.graph import END, START, StateGraph
+from sqlalchemy.orm import Session
+from threading import Lock
+import time
 
 from app.core.config import Settings
 from app.graphs.rag_nodes import RagNodes
@@ -71,24 +73,44 @@ class RagWorkflow:
             observe_graph_node("ola.rag.retrieve.merge", nodes.merge_results),
         )
         builder.add_node(
-            "expand_links_placeholder",
-            observe_graph_node("ola.rag.links.expand", nodes.expand_links_placeholder),
+            "expand_links",
+            observe_graph_node("ola.rag.links.expand", nodes.expand_links),
         )
         builder.add_node(
             "rerank_results",
             observe_graph_node("ola.rag.rerank", nodes.rerank_results),
         )
         builder.add_node(
+            "expand_neighbors",
+            observe_graph_node("ola.rag.neighbors.expand", nodes.expand_neighbors),
+        )
+        builder.add_node(
             "build_context",
             observe_graph_node("ola.rag.context.build", nodes.build_context),
         )
         builder.add_node("finalize_retrieval", nodes.finalize_retrieval)
-        builder.add_node("check_answerability", nodes.check_answerability)
+        builder.add_node(
+            "evaluate_evidence_sufficiency",
+            observe_graph_node(
+                "ola.rag.evidence.evaluate",
+                nodes.evaluate_evidence_sufficiency,
+            ),
+        )
         builder.add_node("finalize_no_answer", nodes.finalize_no_answer)
-        builder.add_node("generate_answer", nodes.generate_answer)
+        builder.add_node(
+            "generate_answer",
+            observe_graph_node("ola.rag.answer_policy.route", nodes.generate_answer),
+        )
         builder.add_node(
             "validate_citations",
             observe_graph_node("ola.rag.citations.validate", nodes.validate_citations),
+        )
+        builder.add_node(
+            "enforce_answer_safety",
+            observe_graph_node(
+                "ola.rag.safety.enforce",
+                nodes.enforce_answer_safety,
+            ),
         )
         builder.add_node(
             "basic_evaluate",
@@ -112,26 +134,45 @@ class RagWorkflow:
         )
         builder.add_edge("rewrite_query", "retrieve_rewritten_query")
         builder.add_edge("retrieve_rewritten_query", "merge_results")
-        builder.add_edge("merge_results", "expand_links_placeholder")
-        builder.add_edge("expand_links_placeholder", "rerank_results")
-        builder.add_edge("rerank_results", "build_context")
+        builder.add_edge("merge_results", "expand_links")
+        builder.add_edge("expand_links", "rerank_results")
+        builder.add_edge("rerank_results", "expand_neighbors")
+        builder.add_edge("expand_neighbors", "build_context")
         builder.add_conditional_edges(
             "build_context",
             nodes.route_mode,
-            {"retrieve": "finalize_retrieval", "ask": "check_answerability"},
+            {
+                "retrieve": "finalize_retrieval",
+                "ask": "evaluate_evidence_sufficiency",
+            },
         )
         builder.add_edge("finalize_retrieval", END)
         builder.add_conditional_edges(
-            "check_answerability",
-            nodes.route_answerability,
-            {"answer": "generate_answer", "no_answer": "finalize_no_answer"},
+            "evaluate_evidence_sufficiency",
+            nodes.route_answer_policy,
+            {
+                "answer": "generate_answer",
+                "answer_with_uncertainty": "generate_answer",
+                "abstain": "finalize_no_answer",
+            },
         )
-        builder.add_edge("finalize_no_answer", "save_qa_history")
+        builder.add_conditional_edges(
+            "finalize_no_answer",
+            nodes.route_persistence,
+            {"persist": "save_qa_history", "end": END},
+        )
         builder.add_edge("generate_answer", "validate_citations")
-        builder.add_edge("validate_citations", "basic_evaluate")
-        builder.add_edge("basic_evaluate", "save_qa_history")
+        builder.add_edge("validate_citations", "enforce_answer_safety")
+        builder.add_edge("enforce_answer_safety", "basic_evaluate")
+        builder.add_conditional_edges(
+            "basic_evaluate",
+            nodes.route_persistence,
+            {"persist": "save_qa_history", "end": END},
+        )
         builder.add_edge("save_qa_history", END)
         self.graph = builder.compile(name="rag_workflow")
+        self._invocation_lock = Lock()
+        self._invocation_count = 0
 
     def invoke(
         self,
@@ -148,7 +189,14 @@ class RagWorkflow:
         goal_id: str | None = None,
         learning_status_id: str | None = None,
         run_id: str | None = None,
+        evaluation_mode: bool = False,
+        evaluation_conversation_context: list[dict] | None = None,
+        retrieval_profile: dict | None = None,
     ) -> RagState:
+        started = time.perf_counter()
+        with self._invocation_lock:
+            cold_start = self._invocation_count == 0
+            self._invocation_count += 1
         state: RagState = {
             "mode": mode,
             "question": question,
@@ -161,6 +209,14 @@ class RagWorkflow:
             "goal_id": goal_id,
             "learning_status_id": learning_status_id,
             "run_id": run_id,
+            "evaluation_mode": evaluation_mode,
+            "evaluation_conversation_context": evaluation_conversation_context or [],
+            "retrieval_profile": retrieval_profile or {},
+            "cold_start": cold_start,
         }
         with get_observability().suppress_automatic_tracing():
-            return self.graph.invoke(state, context={"db": db})
+            result = self.graph.invoke(state, context={"db": db})
+        performance = dict(result.get("performance_metrics") or {})
+        performance["total_ms"] = (time.perf_counter() - started) * 1000
+        result["performance_metrics"] = performance
+        return result
