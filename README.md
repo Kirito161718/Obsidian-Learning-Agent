@@ -184,6 +184,18 @@ GET /agent/observability/status
 
 `/agent` 页面显示启用、配置、Project、Safe Mode、Schema Version、稳定错误码及 Run 的只读 Trace ID；不会显示 API Key 或完整 Workspace ID。完整契约见 [`docs/LANGSMITH_OBSERVABILITY.md`](docs/LANGSMITH_OBSERVABILITY.md)。
 
+## RAG 固定评估
+
+项目提供本地固定数据集、确定性检索/引用/拒答指标、隔离 Retrieval Profile、可恢复实验、LangSmith 安全子集和脱敏报告。高级页面为 `/agent/rag-evaluation`；真实数据集默认被 Git 忽略，评估不会写入 QA History 或最近会话。
+
+```powershell
+python -m app.rag_evaluation.cli validate-dataset --file obsidian-real-v1.yaml
+python -m app.rag_evaluation.cli run --dataset-file obsidian-real-v1.yaml --profile rag-baseline-v1 --mode retrieval
+python -m app.rag_evaluation.cli compare <experiment-a> <experiment-b>
+```
+
+完整 Schema、指标公式、隐私边界、Baseline 和报告说明见 [`docs/RAG_EVALUATION.md`](docs/RAG_EVALUATION.md)。
+
 ## 7. 本地启动步骤
 
 先确保本地 MySQL 已启动，并创建数据库：

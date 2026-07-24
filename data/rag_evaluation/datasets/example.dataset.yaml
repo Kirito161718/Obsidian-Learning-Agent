@@ -1,0 +1,29 @@
+schema_version: rag-eval-v1
+name: example-rag-evaluation
+version: example-v1
+description: Schema-only example. Replace note IDs only in a private ignored dataset.
+cases:
+  - id: rag-case-example-001
+    category: single_note
+    question: What does the referenced section explain?
+    should_answer: true
+    requires_rewrite: false
+    source_scope:
+      type: obsidian
+      note_ids:
+        - example-note-id
+    relevance_judgments:
+      - note_id: example-note-id
+        heading_path:
+          - Example heading
+        relevance_grade: 3
+    expected_answer_points:
+      - Example expected point
+    acceptable_citation_note_ids:
+      - example-note-id
+    forbidden_citation_note_ids: []
+    conversation_context: []
+    tags:
+      - schema-example
+    share_with_langsmith: false
+    review_status: draft

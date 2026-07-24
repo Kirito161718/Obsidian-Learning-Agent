@@ -165,7 +165,7 @@ GET /agent/observability/status
 
 ## 当前范围
 
-阶段 7A 只建立观测基线，没有 LangSmith Dataset、Evaluator、在线评估、固定测试集或 RAG 算法优化。阶段 7B 将建立固定测试集和离线 Retrieval/Answer Evaluation。
+阶段 7A 建立生产观测基线。阶段 7B 在不改变上述 Safe Trace 契约的前提下增加固定本地数据集、离线 Retrieval/Answer Evaluation 和 LangSmith 安全子集。只有明确标记 `share_with_langsmith=true` 且已审阅、未 stale 的 Case 会同步；本地数据集与本地报告仍是事实来源。发布失败不会重跑 RAG Case。完整说明见 [`RAG_EVALUATION.md`](RAG_EVALUATION.md)。
 
 官方参考：
 

@@ -52,6 +52,6 @@ source_name = filename
 - Obsidian 内部链接的真实检索和扩展。
 - 自动 Lessons Memory、自动 Reflection；持久化 Checkpointer 仅用于阶段 6 官方更新审批，不用于 RAG 完整 State。
 - Hybrid Search、BM25、任务队列、MCP 写工具、模型自主 MCP 调用和多智能体编排。
-- LangSmith Dataset、Evaluator、在线评估和固定 RAG 测试集；这些属于阶段 7B。
+- LangSmith 在线 Evaluator 仍不属于当前范围；固定本地 RAG 数据集、确定性 Evaluator、隔离实验和 LangSmith 安全子集已在阶段 7B 接入，见 `RAG_EVALUATION.md`。
 
 旧项目背景、已有 HTTP 契约和历史部署说明仍保留在 `RAG_PROJECT_HANDOFF.md`，但若其中的独立服务复用建议与本文冲突，以本文为准。

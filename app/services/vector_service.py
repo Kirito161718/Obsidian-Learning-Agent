@@ -2,6 +2,7 @@ import time
 import logging
 from collections.abc import Callable
 from typing import TypeVar
+from urllib.parse import urlparse
 from uuid import NAMESPACE_URL, uuid5
 
 from qdrant_client import QdrantClient
@@ -15,16 +16,28 @@ T = TypeVar("T")
 logger = logging.getLogger(__name__)
 
 
+def qdrant_transport_kwargs(url: str) -> dict[str, bool]:
+    """Keep loopback Qdrant traffic out of OS-level HTTP proxies."""
+    host = (urlparse(url).hostname or "").casefold()
+    return {"trust_env": False} if host in {"127.0.0.1", "::1", "localhost"} else {}
+
+
 class VectorService:
-    def __init__(self, vector_size: int | None = None, ensure_collection: bool = True) -> None:
+    def __init__(
+        self,
+        vector_size: int | None = None,
+        ensure_collection: bool = True,
+        collection_name: str | None = None,
+    ) -> None:
         settings = get_settings()
-        self.collection_name = settings.qdrant_collection
+        self.collection_name = collection_name or settings.qdrant_collection
         self.client = QdrantClient(
             url=settings.qdrant_url,
             api_key=settings.qdrant_api_key or None,
             timeout=30,
             prefer_grpc=settings.qdrant_prefer_grpc,
             grpc_port=settings.qdrant_grpc_port,
+            **qdrant_transport_kwargs(settings.qdrant_url),
         )
         self.vector_size = vector_size
         if ensure_collection:

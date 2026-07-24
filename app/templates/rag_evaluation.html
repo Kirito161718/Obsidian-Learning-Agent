@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RAG评估与优化</title>
+  <link rel="stylesheet" href="/static/rag_evaluation.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Obsidian Learning Agent</p>
+      <h1>RAG评估与优化</h1>
+      <p>固定数据集、隔离实验、晋级门槛与可回滚检索配置。</p>
+    </header>
+    <section class="summary-grid" aria-label="当前状态">
+      <article><span>Active Profile</span><strong id="active-profile">—</strong></article>
+      <article><span>Baseline Profile</span><strong id="baseline-profile">—</strong></article>
+      <article><span>Validated Cases</span><strong id="case-count">—</strong></article>
+      <article><span>Running Experiments</span><strong id="running-count">—</strong></article>
+    </section>
+    <section>
+      <div class="section-heading">
+        <div><p class="eyebrow">Datasets</p><h2>固定评估集</h2></div>
+        <button id="refresh">刷新</button>
+      </div>
+      <div id="datasets" class="cards" aria-live="polite"></div>
+    </section>
+    <section>
+      <div class="section-heading">
+        <div><p class="eyebrow">Experiments</p><h2>实验与指标</h2></div>
+        <div class="actions">
+          <label>模式
+            <select id="run-mode">
+              <option value="retrieval">Retrieval-only</option>
+              <option value="full">Full RAG</option>
+            </select>
+          </label>
+          <button id="run-baseline">运行 Baseline</button>
+          <button id="compare-selected">比较所选</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>选择</th><th>实验</th><th>Profile</th><th>状态</th><th>Recall@10</th><th>NDCG@10</th><th>p95</th><th>调用/Token</th><th>分类/失败</th><th>LangSmith</th><th>报告</th></tr></thead>
+          <tbody id="experiments"></tbody>
+        </table>
+      </div>
+      <pre id="comparison" class="comparison" hidden></pre>
+    </section>
+    <section>
+      <div class="section-heading">
+        <div><p class="eyebrow">Profiles</p><h2>版本化配置</h2></div>
+      </div>
+      <div id="profiles" class="cards"></div>
+    </section>
+    <p id="status" role="status"></p>
+  </main>
+  <script src="/static/rag_evaluation.js" defer></script>
+</body>
+</html>

@@ -14,6 +14,9 @@ class RagState(TypedDict, total=False):
     rewrite_applied: bool
     rewrite_reason: str | None
     rewrite_enabled: bool | None
+    evaluation_mode: bool
+    evaluation_conversation_context: list[dict]
+    retrieval_profile: dict
     document_id: str | None
     source_types: list[str] | None
     source_path_prefixes: list[str] | None
@@ -43,6 +46,10 @@ class RagState(TypedDict, total=False):
     model_call_count: int
     tool_call_count: int
     retry_count: int
+    retrieval_latency_ms: float
+    rewrite_latency_ms: float
+    rerank_latency_ms: float
+    llm_latency_ms: float
     answerable: bool
     error_code: str | None
     error_message: str | None

@@ -1,6 +1,7 @@
 import inspect
 import logging
 import re
+import time
 from typing import Literal
 
 from langgraph.runtime import Runtime
@@ -63,6 +64,11 @@ class RagNodes:
             "rewrite_applied": False,
             "rewrite_reason": None,
             "rewrite_enabled": state.get("rewrite_enabled"),
+            "evaluation_mode": bool(state.get("evaluation_mode")),
+            "evaluation_conversation_context": list(
+                state.get("evaluation_conversation_context") or []
+            ),
+            "retrieval_profile": dict(state.get("retrieval_profile") or {}),
             "document_id": state.get("document_id"),
             "source_types": state.get("source_types"),
             "source_path_prefixes": state.get("source_path_prefixes"),
@@ -96,6 +102,10 @@ class RagNodes:
             "model_call_count": 0,
             "tool_call_count": 0,
             "retry_count": 0,
+            "retrieval_latency_ms": 0.0,
+            "rewrite_latency_ms": 0.0,
+            "rerank_latency_ms": 0.0,
+            "llm_latency_ms": 0.0,
             "answerable": False,
             "error_code": None,
             "error_message": None,
@@ -145,13 +155,42 @@ class RagNodes:
         }
 
     def load_session_memory(self, state: RagState, runtime: Runtime[RagRuntimeContext]) -> RagState:
+        profile = state.get("retrieval_profile") or {}
+        if profile.get("session_memory_for_rewrite") is False:
+            return {"session_memory": [], "session_memory_truncated": False}
+        if state.get("evaluation_mode") and state.get(
+            "evaluation_conversation_context"
+        ):
+            turns = state["evaluation_conversation_context"]
+            memory: list[dict] = []
+            pending_question: str | None = None
+            for turn in turns:
+                if turn.get("role") == "user":
+                    pending_question = str(turn.get("content") or "")
+                elif turn.get("role") == "assistant" and pending_question:
+                    memory.append(
+                        {
+                            "question": pending_question,
+                            "answer_preview": str(turn.get("content") or ""),
+                        }
+                    )
+                    pending_question = None
+            if pending_question:
+                memory.append({"question": pending_question, "answer_preview": ""})
+            return {"session_memory": memory, "session_memory_truncated": False}
         db = (runtime.context or {}).get("db")
         memory, truncated = self.session_memory_service.load_with_metadata(db, state.get("session_id"))
         return {"session_memory": memory, "session_memory_truncated": truncated}
 
     def retrieve_original_query(self, state: RagState) -> RagState:
-        results = self._retrieve(state["original_query"], state)
-        return {"original_results": results, "tool_call_count": state["tool_call_count"] + 2}
+        started = time.perf_counter()
+        results = self._retrieve(state["original_query"], state, rewritten=False)
+        return {
+            "original_results": results,
+            "tool_call_count": state["tool_call_count"] + 2,
+            "retrieval_latency_ms": state.get("retrieval_latency_ms", 0.0)
+            + (time.perf_counter() - started) * 1000,
+        }
 
     def assess_retrieval_quality(self, state: RagState) -> RagState:
         results = state["original_results"]
@@ -161,7 +200,9 @@ class RagNodes:
 
         rewrite_enabled = state.get("rewrite_enabled")
         if rewrite_enabled is None:
-            rewrite_enabled = self.settings.rag_rewrite_enabled
+            rewrite_enabled = (state.get("retrieval_profile") or {}).get(
+                "rewrite_enabled", self.settings.rag_rewrite_enabled
+            )
 
         if not rewrite_enabled:
             reason = "rewrite_disabled"
@@ -188,9 +229,12 @@ class RagNodes:
         }
 
     def route_rewrite(self, state: RagState) -> Literal["rewrite", "merge"]:
+        if (state.get("retrieval_profile") or {}).get("dual_retrieval_enabled") is False:
+            return "merge"
         return "rewrite" if state["retrieval_quality"].get("rewrite_needed") else "merge"
 
     def rewrite_query(self, state: RagState) -> RagState:
+        started = time.perf_counter()
         try:
             rewrite = self.llm_client.rewrite_query
             memory = state.get("session_memory") or []
@@ -209,18 +253,32 @@ class RagNodes:
                 "error_code": "rewrite_failed",
                 "error_message": type(exc).__name__,
                 "model_call_count": state["model_call_count"] + 1,
+                "rewrite_latency_ms": state.get("rewrite_latency_ms", 0.0)
+                + (time.perf_counter() - started) * 1000,
             }
         return {
             "rewritten_query": rewritten or state["original_query"],
             "rewrite_applied": bool(rewritten and rewritten != state["original_query"]),
             "model_call_count": state["model_call_count"] + 1,
+            "rewrite_latency_ms": state.get("rewrite_latency_ms", 0.0)
+            + (time.perf_counter() - started) * 1000,
         }
 
     def retrieve_rewritten_query(self, state: RagState) -> RagState:
         if not state["rewrite_applied"]:
             return {"rewritten_results": []}
-        results = self._retrieve(state["rewritten_query"] or state["original_query"], state)
-        return {"rewritten_results": results, "tool_call_count": state["tool_call_count"] + 2}
+        started = time.perf_counter()
+        results = self._retrieve(
+            state["rewritten_query"] or state["original_query"],
+            state,
+            rewritten=True,
+        )
+        return {
+            "rewritten_results": results,
+            "tool_call_count": state["tool_call_count"] + 2,
+            "retrieval_latency_ms": state.get("retrieval_latency_ms", 0.0)
+            + (time.perf_counter() - started) * 1000,
+        }
 
     def merge_results(self, state: RagState) -> RagState:
         merged: dict[str, RetrievedChunk] = {}
@@ -250,24 +308,35 @@ class RagNodes:
         chunks = state["expanded_results"]
         if not chunks:
             return {"reranked_results": []}
+        profile = state.get("retrieval_profile") or {}
+        if profile.get("rerank_enabled") is False:
+            limit = int(profile.get("final_top_k") or state["top_k"])
+            return {"reranked_results": chunks[:limit]}
+        rerank_limit = int(profile.get("rerank_top_k") or state["top_k"])
         query = state.get("rewritten_query") if state.get("rewrite_applied") else state["original_query"]
+        started = time.perf_counter()
         try:
             reranked = self.rerank_service.rerank(
                 query or state["original_query"],
                 [chunk.to_rerank_item() for chunk in chunks],
-                state["top_k"],
+                rerank_limit,
             )
             converted = [RetrievedChunk.from_search_result(item) for item in reranked]
         except Exception as exc:
             logger.warning("Graph rerank fallback: error_type=%s", type(exc).__name__)
-            converted = chunks[: state["top_k"]]
+            converted = chunks[:rerank_limit]
             return {
                 "reranked_results": converted,
                 "tool_call_count": state["tool_call_count"] + 1,
                 "error_code": "rerank_failed",
                 "error_message": type(exc).__name__,
+                "rerank_latency_ms": (time.perf_counter() - started) * 1000,
             }
-        return {"reranked_results": converted, "tool_call_count": state["tool_call_count"] + 1}
+        return {
+            "reranked_results": converted,
+            "tool_call_count": state["tool_call_count"] + 1,
+            "rerank_latency_ms": (time.perf_counter() - started) * 1000,
+        }
 
     def build_context(self, state: RagState) -> RagState:
         result = self.context_builder.build(state["reranked_results"], max_chunks=state["top_k"])
@@ -298,10 +367,15 @@ class RagNodes:
     def check_answerability(self, state: RagState) -> RagState:
         chunks = state["context_chunks"]
         max_score = max((chunk.score or 0.0 for chunk in chunks), default=0.0)
+        threshold = float(
+            (state.get("retrieval_profile") or {}).get(
+                "no_answer_score_threshold", self.settings.rag_rewrite_score_threshold
+            )
+        )
         answerable = bool(
             chunks
             and state["context_text"].strip()
-            and max_score >= self.settings.rag_rewrite_score_threshold
+            and max_score >= threshold
         )
         return {
             "answerable": answerable,
@@ -318,6 +392,7 @@ class RagNodes:
         return {"answer": NO_CONTEXT_ANSWER, "context_chunks": [], "context_sources": [], "citations": []}
 
     def generate_answer(self, state: RagState) -> RagState:
+        started = time.perf_counter()
         generate = self.llm_client.generate_answer
         parameters = inspect.signature(generate).parameters
         kwargs = {}
@@ -331,7 +406,12 @@ class RagNodes:
             if value and (name in parameters or accepts_kwargs):
                 kwargs[name] = value
         answer = generate(state["question"], state["context_text"], **kwargs)
-        return {"answer": answer, "model_call_count": state["model_call_count"] + 1}
+        return {
+            "answer": answer,
+            "model_call_count": state["model_call_count"] + 1,
+            "llm_latency_ms": state.get("llm_latency_ms", 0.0)
+            + (time.perf_counter() - started) * 1000,
+        }
 
     def validate_citations(self, state: RagState) -> RagState:
         sources_by_index = {source["citation_index"]: source for source in state["context_sources"]}
@@ -366,6 +446,9 @@ class RagNodes:
         result["passed"] = bool(result["has_context"] and result["has_valid_citations"] and not invalid)
         return {"evaluation_result": result}
 
+    def route_persistence(self, state: RagState) -> Literal["persist", "end"]:
+        return "end" if state.get("evaluation_mode") else "persist"
+
     def save_qa_history(self, state: RagState, runtime: Runtime[RagRuntimeContext]) -> RagState:
         db = (runtime.context or {}).get("db")
         if db is None:
@@ -383,9 +466,19 @@ class RagNodes:
             LearningSessionService().record_activity(db, state["session_id"], state["question"])
         return {"qa_history_id": qa.id}
 
-    def _retrieve(self, query: str, state: RagState) -> list[RetrievedChunk]:
+    def _retrieve(
+        self,
+        query: str,
+        state: RagState,
+        *,
+        rewritten: bool,
+    ) -> list[RetrievedChunk]:
         vector = self.embedding_service.embed_query(query)
-        retrieve_top_k = max(state["top_k"] * 5, 20)
+        profile = state.get("retrieval_profile") or {}
+        profile_key = "rewritten_top_k" if rewritten else "original_top_k"
+        retrieve_top_k = int(
+            profile.get(profile_key) or max(state["top_k"] * 5, 20)
+        )
         scope = {
             "source_types": state.get("source_types"),
             "source_path_prefixes": state.get("source_path_prefixes"),

@@ -213,6 +213,114 @@ class AgentRun(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
 
 
+class RagEvalDataset(Base):
+    __tablename__ = "rag_eval_datasets"
+    __table_args__ = (
+        UniqueConstraint("name", "version", name="uq_rag_eval_dataset_version"),
+        Index("ix_rag_eval_dataset_status_created", "status", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    name: Mapped[str] = mapped_column(String(150), nullable=False)
+    version: Mapped[str] = mapped_column(String(80), nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    case_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    stale_case_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    safe_case_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft", index=True)
+    created_at: Mapped[datetime] = mapped_column(PRECISE_DATETIME, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(PRECISE_DATETIME, default=utc_now, onupdate=utc_now)
+
+
+class RagRetrievalProfile(Base):
+    __tablename__ = "rag_retrieval_profiles"
+    __table_args__ = (
+        UniqueConstraint("profile_key", "version", name="uq_rag_retrieval_profile_version"),
+        Index("ix_rag_profile_active_baseline", "is_active", "is_baseline"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    profile_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    version: Mapped[str] = mapped_column(String(80), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    configuration: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    configuration_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    collection_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    is_baseline: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    evaluation_status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
+    promotion_eligible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    manual_exception: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    rollback_profile_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("rag_retrieval_profiles.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(PRECISE_DATETIME, default=utc_now)
+    activated_at: Mapped[datetime | None] = mapped_column(PRECISE_DATETIME, nullable=True)
+
+
+class RagEvalExperiment(Base):
+    __tablename__ = "rag_eval_experiments"
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_rag_eval_experiment_name"),
+        Index("ix_rag_eval_experiment_status_created", "status", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    dataset_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("rag_eval_datasets.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    profile_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("rag_retrieval_profiles.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    variant_key: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    experiment_type: Mapped[str] = mapped_column(String(30), nullable=False, default="retrieval")
+    retrieval_profile_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending", index=True)
+    configuration_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    configuration_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    metric_summary: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    failure_summary: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    langsmith_experiment_name: Mapped[str | None] = mapped_column(String(250), nullable=True)
+    langsmith_experiment_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(PRECISE_DATETIME, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(PRECISE_DATETIME, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    error_preview: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(PRECISE_DATETIME, default=utc_now)
+
+
+class RagEvalCaseResult(Base):
+    __tablename__ = "rag_eval_case_results"
+    __table_args__ = (
+        UniqueConstraint("experiment_id", "case_id", "repeat_index", name="uq_rag_eval_case_repeat"),
+        Index("ix_rag_eval_case_experiment_status", "experiment_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    experiment_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("rag_eval_experiments.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    case_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    category: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    repeat_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    metric_values: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    retrieval_stats: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    answer_stats: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    internal_run_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("agent_runs.id", ondelete="SET NULL"), nullable=True
+    )
+    external_trace_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    model_call_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    input_token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(PRECISE_DATETIME, default=utc_now)
+
+
 class ToolExecution(Base):
     __tablename__ = "tool_executions"
 

@@ -47,6 +47,27 @@ class Settings(BaseSettings):
     rag_rewrite_short_query_length: int = 4
     rag_context_max_chars: int = 12000
     rag_max_chunks_per_source: int = 3
+    rag_evaluation_enabled: bool = True
+    rag_evaluation_data_dir: Path = Path("data/rag_evaluation")
+    rag_evaluation_report_dir: Path = Path("reports/rag_evaluation")
+    rag_evaluation_max_cases: int = Field(default=100, ge=1, le=10_000)
+    rag_evaluation_default_top_k_values: str = "5,10,20"
+    rag_evaluation_repeat_count: int = Field(default=1, ge=1, le=20)
+    rag_evaluation_final_repeat_count: int = Field(default=3, ge=1, le=20)
+    rag_evaluation_max_concurrent_cases: int = Field(default=1, ge=1, le=16)
+    rag_evaluation_langsmith_enabled: bool = True
+    rag_evaluation_langsmith_dataset: str = "obsidian-learning-agent-rag-eval-v1"
+    rag_evaluation_langsmith_project: str = "obsidian-learning-agent"
+    rag_evaluation_upload_safe_cases_only: bool = True
+    rag_evaluation_collection_prefix: str = "rag_eval_"
+    rag_evaluation_keep_collections: int = Field(default=3, ge=0, le=100)
+    rag_evaluation_keep_experiments: int = Field(default=20, ge=1, le=1000)
+    rag_promotion_min_recall_gain: float = Field(default=0.02, ge=0, le=1)
+    rag_promotion_min_ndcg_gain: float = Field(default=0.02, ge=0, le=1)
+    rag_promotion_max_citation_drop: float = Field(default=0.01, ge=0, le=1)
+    rag_promotion_max_no_answer_drop: float = Field(default=0.02, ge=0, le=1)
+    rag_promotion_max_p95_latency_increase_ratio: float = Field(default=0.20, ge=0, le=10)
+    rag_retrieval_profile_version: str = "rag-baseline-v1"
     learning_session_review_max_qa: int = Field(default=20, ge=1, le=100)
 
     session_memory_enabled: bool = True
@@ -152,6 +173,10 @@ class Settings(BaseSettings):
             self.upload_dir = BASE_DIR / self.upload_dir
         if not self.mcp_config_path.is_absolute():
             self.mcp_config_path = BASE_DIR / self.mcp_config_path
+        if not self.rag_evaluation_data_dir.is_absolute():
+            self.rag_evaluation_data_dir = BASE_DIR / self.rag_evaluation_data_dir
+        if not self.rag_evaluation_report_dir.is_absolute():
+            self.rag_evaluation_report_dir = BASE_DIR / self.rag_evaluation_report_dir
         if self.embedding_model:
             self.embedding_model_name = self.embedding_model
         return self
@@ -203,6 +228,27 @@ class Settings(BaseSettings):
     @property
     def model_cache_dir(self) -> Path:
         return BASE_DIR / "model_cache"
+
+    @property
+    def rag_evaluation_dataset_dir(self) -> Path:
+        return self.rag_evaluation_data_dir / "datasets"
+
+    @property
+    def rag_evaluation_artifact_dir(self) -> Path:
+        return self.rag_evaluation_data_dir / "experiment_artifacts"
+
+    @property
+    def rag_evaluation_top_k_values(self) -> tuple[int, ...]:
+        values = tuple(
+            sorted(
+                {
+                    int(item)
+                    for item in self._csv_values(self.rag_evaluation_default_top_k_values)
+                    if item.isdigit() and 1 <= int(item) <= 100
+                }
+            )
+        )
+        return values or (5, 10, 20)
 
     @property
     def langsmith_observability_requested(self) -> bool:

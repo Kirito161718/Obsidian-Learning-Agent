@@ -126,10 +126,18 @@ class RagWorkflow:
             nodes.route_answerability,
             {"answer": "generate_answer", "no_answer": "finalize_no_answer"},
         )
-        builder.add_edge("finalize_no_answer", "save_qa_history")
+        builder.add_conditional_edges(
+            "finalize_no_answer",
+            nodes.route_persistence,
+            {"persist": "save_qa_history", "end": END},
+        )
         builder.add_edge("generate_answer", "validate_citations")
         builder.add_edge("validate_citations", "basic_evaluate")
-        builder.add_edge("basic_evaluate", "save_qa_history")
+        builder.add_conditional_edges(
+            "basic_evaluate",
+            nodes.route_persistence,
+            {"persist": "save_qa_history", "end": END},
+        )
         builder.add_edge("save_qa_history", END)
         self.graph = builder.compile(name="rag_workflow")
 
@@ -148,6 +156,9 @@ class RagWorkflow:
         goal_id: str | None = None,
         learning_status_id: str | None = None,
         run_id: str | None = None,
+        evaluation_mode: bool = False,
+        evaluation_conversation_context: list[dict] | None = None,
+        retrieval_profile: dict | None = None,
     ) -> RagState:
         state: RagState = {
             "mode": mode,
@@ -161,6 +172,9 @@ class RagWorkflow:
             "goal_id": goal_id,
             "learning_status_id": learning_status_id,
             "run_id": run_id,
+            "evaluation_mode": evaluation_mode,
+            "evaluation_conversation_context": evaluation_conversation_context or [],
+            "retrieval_profile": retrieval_profile or {},
         }
         with get_observability().suppress_automatic_tracing():
             return self.graph.invoke(state, context={"db": db})
