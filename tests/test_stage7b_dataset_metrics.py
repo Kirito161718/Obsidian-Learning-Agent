@@ -11,6 +11,7 @@ from app.rag_evaluation.dataset_loader import (
 from app.rag_evaluation.dataset_validator import DatasetValidator, VaultCatalogEntry
 from app.rag_evaluation.errors import DatasetPathError
 from app.rag_evaluation.metrics import (
+    aggregate_repeat_metrics,
     aggregate_metric_rows,
     answerability_metrics,
     citation_metrics,
@@ -238,6 +239,24 @@ def test_aggregate_metrics_turn_boolean_case_results_into_rates():
     )
     assert summary["rewrite_triggered"] == 0.5
     assert summary["p50_latency"] == 20
+
+
+def test_repeat_aggregation_uses_between_repeat_summaries():
+    summary = aggregate_repeat_metrics(
+        [
+            (0, {"recall@10": 0.4, "total_latency_ms": 100}),
+            (0, {"recall@10": 0.6, "total_latency_ms": 200}),
+            (1, {"recall@10": 0.8, "total_latency_ms": 300}),
+            (1, {"recall@10": 1.0, "total_latency_ms": 500}),
+        ]
+    )
+
+    assert summary["repeat_count"] == 2
+    assert summary["repeat_summaries"]["0"]["recall@10"] == pytest.approx(0.5)
+    assert summary["repeat_summaries"]["1"]["recall@10"] == pytest.approx(0.9)
+    assert summary["recall@10_repeat_mean"] == pytest.approx(0.7)
+    assert summary["recall@10_repeat_stddev"] == pytest.approx(0.2)
+    assert summary["p95_latency_repeat_mean"] == pytest.approx(342.5)
 
 
 def test_promotion_requires_gain_and_all_safeguards():

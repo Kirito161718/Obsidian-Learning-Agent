@@ -295,6 +295,49 @@ def test_runner_retries_failed_rows_when_resuming(db_session, tmp_path):
     assert all(result.status == "succeeded" for result in results)
 
 
+def test_runner_extends_completed_experiment_to_more_repeats(
+    db_session, tmp_path
+):
+    settings, value, dataset_row, profile = records(db_session, tmp_path)
+    service = ExperimentService(settings)
+    experiment = service.create_experiment(
+        db_session,
+        dataset=dataset_row,
+        profile=profile,
+        name="runner-repeat-extension-test",
+        variant_key="baseline",
+        experiment_type="retrieval",
+    )
+    runner = EvaluationRunner(
+        fake_case_runner,
+        settings=settings,
+        publisher=DisabledPublisher(),
+    )
+    runner.run(
+        db_session,
+        dataset_record=dataset_row,
+        dataset=value,
+        profile=profile,
+        experiment=experiment,
+        repeat_count=1,
+        publish_langsmith=False,
+    )
+
+    results = runner.run(
+        db_session,
+        dataset_record=dataset_row,
+        dataset=value,
+        profile=profile,
+        experiment=experiment,
+        repeat_count=3,
+        publish_langsmith=False,
+    )
+
+    assert len(results) == 6
+    assert experiment.metric_summary["repeat_count"] == 3
+    assert experiment.metric_summary["recall@10_repeat_stddev"] == 0
+
+
 def test_runner_rejects_mode_mismatch(db_session, tmp_path):
     settings, value, dataset_row, profile = records(db_session, tmp_path)
     service = ExperimentService(settings)

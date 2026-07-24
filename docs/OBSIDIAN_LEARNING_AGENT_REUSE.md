@@ -1,6 +1,6 @@
 # Obsidian Learning Agent 演进与复用说明
 
-> 阶段 3 已实现本地学习工作台与学习闭环；阶段 4 已增加受限 Memory、Context、工具与审计；阶段 5 已增加官方 MCP SDK 的只读端到端接入；阶段 6 已增加公开官方来源的人工校验、审批与版本化写回；阶段 7A 已增加可选、安全、Fail-open 的 LangSmith 全链路观测。使用与边界见 [`LOCAL_LEARNING_WORKSPACE.md`](LOCAL_LEARNING_WORKSPACE.md)、[`MEMORY_CONTEXT_TOOL_FOUNDATION.md`](MEMORY_CONTEXT_TOOL_FOUNDATION.md)、[`READ_ONLY_MCP_INTEGRATION.md`](READ_ONLY_MCP_INTEGRATION.md)、[`OFFICIAL_SOURCE_AUDIT_AND_APPROVAL.md`](OFFICIAL_SOURCE_AUDIT_AND_APPROVAL.md) 和 [`LANGSMITH_OBSERVABILITY.md`](LANGSMITH_OBSERVABILITY.md)。
+> 阶段 3 已实现本地学习工作台与学习闭环；阶段 4 已增加受限 Memory、Context、工具与审计；阶段 5 已增加官方 MCP SDK 的只读端到端接入；阶段 6 已增加公开官方来源的人工校验、审批与版本化写回；阶段 7A 已增加可选、安全、Fail-open 的 LangSmith 全链路观测；阶段 7B～7D 已完成固定 RAG 评测、隔离候选和三轮晋级门禁。使用与边界见 [`LOCAL_LEARNING_WORKSPACE.md`](LOCAL_LEARNING_WORKSPACE.md)、[`MEMORY_CONTEXT_TOOL_FOUNDATION.md`](MEMORY_CONTEXT_TOOL_FOUNDATION.md)、[`READ_ONLY_MCP_INTEGRATION.md`](READ_ONLY_MCP_INTEGRATION.md)、[`OFFICIAL_SOURCE_AUDIT_AND_APPROVAL.md`](OFFICIAL_SOURCE_AUDIT_AND_APPROVAL.md)、[`LANGSMITH_OBSERVABILITY.md`](LANGSMITH_OBSERVABILITY.md) 和 [`RAG_OPTIMIZATION_DECISION.md`](RAG_OPTIMIZATION_DECISION.md)。
 
 ## 当前定位
 
@@ -49,9 +49,9 @@ source_name = filename
 - 学习进度历史与自动掌握度推断。
 - 文件监听、自动扫描与后台同步。
 - 移动、删除或任意修改 Vault Markdown；阶段 6 只允许已审批 Proposal 的受限原地内容更新。
-- Obsidian 内部链接的真实检索和扩展。
+- 生产 Active Profile 中的 Obsidian 内部链接扩展；Link V2 已在隔离 Profile 中实现并评测，但因 no-answer 安全门禁失败而未激活。
 - 自动 Lessons Memory、自动 Reflection；持久化 Checkpointer 仅用于阶段 6 官方更新审批，不用于 RAG 完整 State。
 - Hybrid Search、BM25、任务队列、MCP 写工具、模型自主 MCP 调用和多智能体编排。
-- LangSmith 在线 Evaluator 仍不属于当前范围；固定本地 RAG 数据集、确定性 Evaluator、隔离实验和 LangSmith 安全子集已在阶段 7B 接入，见 `RAG_EVALUATION.md`。
+- LangSmith 在线 Evaluator 仍不属于当前范围；固定本地 RAG 数据集、确定性 Evaluator、隔离实验和 LangSmith 安全子集已在阶段 7B 接入。Chunk V2 与 Link V2 在阶段 7C/7D 完成隔离三轮评测，但均因晋级与 no-answer 安全门禁失败而保持 `rejected`，见 `RAG_EVALUATION.md` 和 `RAG_OPTIMIZATION_DECISION.md`。
 
 旧项目背景、已有 HTTP 契约和历史部署说明仍保留在 `RAG_PROJECT_HANDOFF.md`，但若其中的独立服务复用建议与本文冲突，以本文为准。

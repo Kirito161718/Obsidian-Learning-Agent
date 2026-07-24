@@ -300,3 +300,47 @@ def aggregate_metric_rows(
     result["p50_latency"] = percentile(latencies, 0.50)
     result["p95_latency"] = percentile(latencies, 0.95)
     return result
+
+
+def aggregate_repeat_metrics(
+    rows: list[
+        tuple[int, dict[str, float | int | bool | str | None]]
+    ],
+) -> dict[str, Any]:
+    grouped: dict[int, list[dict[str, float | int | bool | str | None]]] = {}
+    for repeat_index, metrics in rows:
+        grouped.setdefault(repeat_index, []).append(metrics)
+    summaries = {
+        repeat_index: aggregate_metric_rows(metrics)
+        for repeat_index, metrics in sorted(grouped.items())
+    }
+    result: dict[str, Any] = {
+        "repeat_count": len(summaries),
+        "repeat_summaries": {
+            str(index): summary for index, summary in summaries.items()
+        },
+    }
+    keys = sorted(
+        {
+            key
+            for summary in summaries.values()
+            for key, value in summary.items()
+            if isinstance(value, (bool, int, float))
+            and key != "case_runs"
+            and not key.endswith("_stddev")
+        }
+    )
+    for key in keys:
+        values = [
+            float(summary[key])
+            for summary in summaries.values()
+            if isinstance(summary.get(key), (bool, int, float))
+            and math.isfinite(float(summary[key]))
+        ]
+        if not values:
+            continue
+        result[f"{key}_repeat_mean"] = mean(values)
+        result[f"{key}_repeat_stddev"] = (
+            pstdev(values) if len(values) > 1 else 0.0
+        )
+    return result

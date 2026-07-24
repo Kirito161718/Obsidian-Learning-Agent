@@ -165,7 +165,9 @@ GET /agent/observability/status
 
 ## 当前范围
 
-阶段 7A 建立生产观测基线。阶段 7B 在不改变上述 Safe Trace 契约的前提下增加固定本地数据集、离线 Retrieval/Answer Evaluation 和 LangSmith 安全子集。只有明确标记 `share_with_langsmith=true` 且已审阅、未 stale 的 Case 会同步；本地数据集与本地报告仍是事实来源。发布失败不会重跑 RAG Case。完整说明见 [`RAG_EVALUATION.md`](RAG_EVALUATION.md)。
+阶段 7A 建立生产观测基线。阶段 7B 在不改变上述 Safe Trace 契约的前提下增加固定本地数据集、离线 Retrieval/Answer Evaluation 和 LangSmith 安全子集。只有明确标记 `share_with_langsmith=true` 且已审阅、未 stale 的 Case 会同步；本地数据集与本地报告仍是事实来源。发布失败不会重跑 RAG Case。
+
+阶段 7C/7D 的候选初筛与最终三轮复测不扩大上传范围。最终 Baseline、Chunk V2、Link V2 的 Retrieval-only 与 Full RAG 实验都使用 `--no-langsmith`，外部观测限流或失败不影响本地逐 Case 持久化、精确恢复和最终决策。完整说明见 [`RAG_EVALUATION.md`](RAG_EVALUATION.md)，最终决策见 [`RAG_OPTIMIZATION_DECISION.md`](RAG_OPTIMIZATION_DECISION.md)。
 
 官方参考：
 

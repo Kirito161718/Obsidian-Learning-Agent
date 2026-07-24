@@ -189,6 +189,20 @@ Chunk V2 将 `retrieval_miss` 从 15 降到 12、`chunk_too_small` 从 15 降到
 
 这组结果是 7C/7D 的保护基线，不表示当前系统质量达标。尤其是 4 个 no-answer Case 全部错误作答，任何候选配置都不得以牺牲拒答安全来换取检索分数；最终晋级必须同时检查引用、拒答、错误回答、模型调用与延迟。
 
+## 7D 三轮复测与决策
+
+Baseline、Chunk V2、Link V2 在同一 CUDA-compatible Runtime、同一数据集 Hash 和 Seed 下分别执行 3 轮 Retrieval-only 与 Full RAG。每个实验均为 29 Case × 3 轮且最终 87/87 成功。报告同时保留逐题标准差与三轮整轮聚合的 `*_repeat_mean`、`*_repeat_stddev`，晋级只使用后者。
+
+| Profile | Retrieval Recall@10 | Retrieval NDCG@10 | Full Citation P / R | Full p95 repeat mean |
+| --- | ---: | ---: | ---: | ---: |
+| Baseline | 0.4400 ± 0.0000 | 0.3725 ± 0.0025 | 0.7038 ± 0.0344 / 0.6000 ± 0.0283 | 18419.0 ± 4716.5 ms |
+| Chunk V2 | 0.4400 ± 0.0000 | 0.3774 ± 0.0061 | 0.7021 ± 0.0542 / 0.6000 ± 0.0432 | 13668.1 ± 1829.8 ms |
+| Link V2 | 0.4400 ± 0.0000 | 0.3708 ± 0.0000 | 0.7496 ± 0.0355 / 0.6400 ± 0.0283 | 18484.8 ± 3236.3 ms |
+
+两个候选均未达到 Recall@10 或 NDCG@10 至少提升 0.02 的主门槛。更重要的是，三种 Profile 的 no-answer 类别三轮共 12 次评估全部错误作答，类别 Accuracy 为 0、False Answer Rate 为 1；Link V2 还在该类别出现 unsupported citations。因此 7D 不晋级任何候选，`rag-baseline-v1` 保持唯一 Active Profile，两个候选标记为 `rejected` 且 `promotion_eligible=false`。
+
+完整实验 ID、均值/标准差、候选理由、绝对安全否决、回滚和后续条件见 [`RAG_OPTIMIZATION_DECISION.md`](RAG_OPTIMIZATION_DECISION.md)。
+
 ## 报告、API 与清理
 
 每个完成实验在 `reports/rag_evaluation/<experiment-id>/` 生成 `summary.json`、`metrics.csv`、`failure_analysis.json` 和 `report.md`。报告不含完整问题、答案、Prompt、Context、Chunk、Secret 或绝对路径。

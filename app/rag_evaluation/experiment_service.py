@@ -231,10 +231,16 @@ class ExperimentService:
         db.refresh(experiment)
         return experiment.status in {"cancel_requested", "cancelled"}
 
-    def resume(self, db: Session, experiment: RagEvalExperiment) -> None:
+    def resume(
+        self,
+        db: Session,
+        experiment: RagEvalExperiment,
+        *,
+        allow_completed_extension: bool = False,
+    ) -> None:
         resumable = experiment.status == "failed"
         if experiment.status == "completed":
-            resumable = (
+            resumable = allow_completed_extension or (
                 db.query(RagEvalCaseResult.id)
                 .filter(
                     RagEvalCaseResult.experiment_id == experiment.id,
@@ -246,7 +252,7 @@ class ExperimentService:
         if not resumable:
             raise ValueError(
                 "Only a failed experiment or a completed experiment with "
-                "failed case rows can be resumed"
+                "failed or missing requested case rows can be resumed"
             )
         experiment.status = "running"
         experiment.error_code = None

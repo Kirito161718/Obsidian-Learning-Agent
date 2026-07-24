@@ -16,7 +16,11 @@ from app.rag_evaluation.experiment_service import (
     LangSmithExperimentPublisher,
 )
 from app.rag_evaluation.failure_analysis import classify_failures, summarize_failures
-from app.rag_evaluation.metrics import aggregate_metric_rows, retrieval_identity
+from app.rag_evaluation.metrics import (
+    aggregate_metric_rows,
+    aggregate_repeat_metrics,
+    retrieval_identity,
+)
 from app.rag_evaluation.report_builder import ReportBuilder
 from app.rag_evaluation.schemas import (
     CaseEvaluationResult,
@@ -82,10 +86,28 @@ class EvaluationRunner:
         if not 1 <= repeats <= 20:
             raise ValueError("repeat_count must be between 1 and 20")
         random.seed(seed)
+        persisted = self.experiments.case_results(db, experiment.id)
+        completed_keys = {
+            (row.case_id, row.repeat_index)
+            for row in persisted
+            if row.status == "succeeded"
+        }
+        requested_keys = {
+            (case.id, repeat_index)
+            for repeat_index in range(repeats)
+            for case in cases
+        }
         if experiment.status == "pending":
             self.experiments.mark_running(db, experiment)
         elif experiment.status in {"failed", "completed"}:
-            self.experiments.resume(db, experiment)
+            self.experiments.resume(
+                db,
+                experiment,
+                allow_completed_extension=(
+                    experiment.status == "completed"
+                    and not requested_keys.issubset(completed_keys)
+                ),
+            )
         elif experiment.status == "cancel_requested":
             pass
         elif experiment.status != "running":
@@ -93,7 +115,6 @@ class EvaluationRunner:
                 "Only pending, running, failed, or cancellation-requested "
                 "experiments can be executed"
             )
-        persisted = self.experiments.case_results(db, experiment.id)
         results: list[CaseEvaluationResult] = [
             CaseEvaluationResult(
                 case_id=row.case_id,
@@ -114,11 +135,6 @@ class EvaluationRunner:
             for row in persisted
             if row.status == "succeeded"
         ]
-        completed_keys = {
-            (row.case_id, row.repeat_index)
-            for row in persisted
-            if row.status == "succeeded"
-        }
         try:
             for repeat_index in range(repeats):
                 for case in cases:
@@ -199,6 +215,14 @@ class EvaluationRunner:
             succeeded = [result for result in results if result.status == "succeeded"]
             metric_summary = aggregate_metric_rows(
                 [result.metrics for result in succeeded]
+            )
+            metric_summary.update(
+                aggregate_repeat_metrics(
+                    [
+                        (result.repeat_index, result.metrics)
+                        for result in succeeded
+                    ]
+                )
             )
             metric_summary["failed_case_runs"] = len(results) - len(succeeded)
             metric_summary["category_counts"] = dict(
