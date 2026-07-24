@@ -31,6 +31,30 @@ def retrieval_identity(item: dict[str, Any]) -> tuple[str, tuple[str, ...]]:
     return note_id, heading
 
 
+def retrieval_heading_paths(item: dict[str, Any]) -> set[tuple[str, ...]]:
+    payload = _payload(item)
+    metadata = payload.get("metadata")
+    metadata = metadata if isinstance(metadata, dict) else {}
+    chunk_metadata = payload.get("chunk_metadata")
+    chunk_metadata = (
+        chunk_metadata if isinstance(chunk_metadata, dict) else {}
+    )
+    _, primary = retrieval_identity(item)
+    raw_paths = (
+        metadata.get("merged_heading_paths")
+        or chunk_metadata.get("merged_heading_paths")
+        or []
+    )
+    paths = {
+        tuple(str(part).strip() for part in path if str(part).strip())
+        for path in raw_paths
+        if isinstance(path, (list, tuple))
+    }
+    if primary:
+        paths.add(primary)
+    return paths or {()}
+
+
 def dedupe_ranked(items: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     seen: set[tuple[str, tuple[str, ...]]] = set()
@@ -47,13 +71,14 @@ def relevance_grade(
     item: dict[str, Any],
     judgments: list[RelevanceJudgment],
 ) -> int:
-    note_id, heading = retrieval_identity(item)
+    note_id, _ = retrieval_identity(item)
+    headings = retrieval_heading_paths(item)
     grades: list[int] = []
     for judgment in judgments:
         expected = tuple(judgment.heading_path)
         if judgment.note_id != note_id:
             continue
-        if not expected or heading == expected:
+        if not expected or expected in headings:
             grades.append(judgment.relevance_grade)
     return max(grades, default=0)
 
@@ -86,22 +111,29 @@ def retrieval_metrics(
     def matched_ground_truth(items: list[dict[str, Any]]) -> set[tuple[str, tuple[str, ...]]]:
         matched: set[tuple[str, tuple[str, ...]]] = set()
         for result in items:
-            note_id, heading = retrieval_identity(result)
+            note_id, _ = retrieval_identity(result)
+            headings = retrieval_heading_paths(result)
             for judgment in positive:
                 expected = tuple(judgment.heading_path)
-                if note_id == judgment.note_id and (not expected or heading == expected):
+                if note_id == judgment.note_id and (
+                    not expected or expected in headings
+                ):
                     matched.add((judgment.note_id, expected))
         return matched
 
     credited: set[tuple[str, tuple[str, ...]]] = set()
     ranked_grades: list[int] = []
     for item in ranked:
-        note_id, heading = retrieval_identity(item)
+        note_id, _ = retrieval_identity(item)
+        headings = retrieval_heading_paths(item)
         matches = [
             judgment
             for judgment in positive
             if judgment.note_id == note_id
-            and (not judgment.heading_path or tuple(judgment.heading_path) == heading)
+            and (
+                not judgment.heading_path
+                or tuple(judgment.heading_path) in headings
+            )
             and (judgment.note_id, tuple(judgment.heading_path)) not in credited
         ]
         if not matches:

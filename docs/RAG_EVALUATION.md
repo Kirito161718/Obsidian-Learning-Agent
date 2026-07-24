@@ -130,6 +130,47 @@ python -m app.rag_evaluation.cli compare <experiment-a> <experiment-b>
 
 基线失败分类包括 15 个 `retrieval_miss`、9 个 `chunk_boundary_loss`、15 个 `chunk_too_small`、5 个 `rerank_inversion` 和 3 个 `missing_link_context`。后续候选必须由这些失败类型驱动，并在隔离 Collection/Profile 中重新评估。
 
+## 7C 候选与隔离索引
+
+7B 的失败证据包括 15 个 `chunk_too_small`、9 个 `chunk_boundary_loss`、3 个 `missing_link_context` 和 5 个 `rerank_inversion`。因此 7C 实现以下候选：
+
+- `markdown-structural-v2`：保留 Heading Path、结构位置、Chunking Version、稳定 Parent/Structural/Sibling ID；代码围栏合法闭合，拆表时重复表头，长列表按完整列表项拆分；只有两个相邻、同级、同一 H1 下且都低于最小长度的 Section 才允许合并。
+- Link Expansion V2：只从初始 Note 扩展一跳；每个初始 Note 最多两个链接目标；链接候选进入同一个 Rerank，不递归；统一按 Chunk ID 去重，并记录 `link_origin_note_id` 和 `expansion_reason`。
+- Neighbor Expansion：只在 Rerank 后取同笔记前后各一个 Chunk，优先同一 Heading；邻居没有伪造的向量分数或 Rerank 分数，并记录扩展来源；Context 字符和单 Note Chunk 上限继续生效。
+
+Chunk V2 写入隔离 Collection `rag_eval_7c_chunk_v2_d3b42e195b8c`，从未覆盖 `rag_chunks`。构建前要求 Vault 文件 Hash 与 MySQL 已索引 Hash 完全一致；中途失败会删除不完整 Collection。构建仅只读 Vault，不更新 Note、QA History、Session 或生产向量。
+
+| Chunk 指标 | V1 `rag_chunks` | V2 Shadow |
+| --- | ---: | ---: |
+| Chunk 总数 | 3685 | 3191 |
+| 每 Note 平均 Chunk | 45.49 | 39.40 |
+| 字符 p50 / p90 / p95 | 143 / 431.6 / 576.6 | 214 / 458 / 616.5 |
+| 低于 200 字比例 | 65.43% | 44.59% |
+| 高于 1800 字比例 | 0.11% | 0.13% |
+| 无标题比例 | 1.55% | 1.79% |
+| 合并多个 Heading 比例 | 0% | 15.48% |
+| 重复 Chunk 比例 | 1.36% | 1.19% |
+| 相邻文本重叠均值 | 6.48% | 6.22% |
+
+Shadow 向量由本机已有 CUDA 运行时加速生成；同一生产 Chunk 用该运行时重嵌入后，与已存向量的余弦相似度为 `1.0`，最大绝对维度差为 `1.53e-7`。模型仍为同一 BGE-M3，评测与 Rerank 仍使用项目 `.venv` 和原生产参数。
+
+MMR 未入选：Baseline 重复 Chunk 仅 1.36%，没有明显的高重复证据。Parent-Child 未入选：V2 与受限邻居扩展已直接覆盖边界上下文问题，先避免引入运行时 Vault Parent 读取。Hybrid 的 Feasibility Decision 为“不实现”：当前 `EmbeddingService` 只通过 SentenceTransformers 产生 dense vector，未安装或验证 BGE-M3 sparse/lexical 输出链路；虽然 Qdrant 支持 Named Sparse Vector 与 RRF/DBSF，但不满足可可靠生成 sparse 表示这一前置条件，因此继续使用 Dense Retrieval，不以字符串匹配伪装 Hybrid，也不下载新模型。
+
+7C 单变量和有限组合的 Retrieval-only 初筛结果如下：
+
+| 候选 | Recall@10 | NDCG@10 | p95 ms | 7C 决策 |
+| --- | ---: | ---: | ---: | --- |
+| 7B Baseline | 0.340 | 0.299 | 35133 | 对照 |
+| Chunk V2 | 0.440 | 0.391 | 42005 | 第一候选；初筛含 1 条暂停前 CPU Case，延迟仅诊断用 |
+| Link Expansion V2 | 0.440 | 0.371 | 15839 | 第二候选 |
+| Neighbor Expansion | 0.380 | 0.313 | 8550 | 拒绝；multi-note Recall 降至 0.20 |
+| Chunk V2 + No Rerank | 0.400 | 0.311 | 7821 | 拒绝；rewrite 类 Recall 降至 0.20 |
+| Chunk V2 + Link V2 | 0.440 | 0.364 | 17979 | 拒绝；未超过 Chunk V2 |
+
+Chunk V2 将 `retrieval_miss` 从 15 降到 12、`chunk_too_small` 从 15 降到 9、`chunk_boundary_loss` 从 9 降到 7、`missing_link_context` 从 3 降到 2。它达到 Recall/NDCG 主提升门槛，但尚未经过统一运行时三次重复、Full RAG 引用与 no-answer 保护检查，因此 7C 不激活任何候选。
+
+初筛加速器只替换 Torch 运行时，继续使用 `.venv` 的 SentenceTransformers 3.3.1。相同三组 CrossEncoder 输入的 CPU/CUDA 排序完全一致，分数最大差约 `1.2e-7`；系统 SentenceTransformers 5.5.1 因排序不一致被拒绝。7D 会让最终 Baseline 与前两名候选使用同一兼容运行时重复，初筛 p95 不用于跨运行时晋级判断。
+
 ## Full RAG 基线
 
 校正后的 Full RAG 基线实验为 `ola-rag-baseline-v1-full-corrected-v1`，29/29 Case 成功，且所有 4 个 no-answer Case 均由完整问答链执行。主要结果如下：

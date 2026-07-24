@@ -104,3 +104,39 @@ def ablation_configurations(
             update={"session_memory_for_rewrite": False}
         ),
     }
+
+
+def candidate_configurations(
+    baseline: RetrievalProfileConfiguration,
+    *,
+    shadow_collection: str,
+) -> dict[str, RetrievalProfileConfiguration]:
+    return {
+        "chunk-v2": baseline.model_copy(
+            update={
+                "chunking_version": "markdown-structural-v2",
+                "collection_name": shadow_collection,
+            }
+        ),
+        "link-v2": baseline.model_copy(
+            update={"link_expansion_enabled": True, "link_expansion_limit": 2}
+        ),
+        "neighbor": baseline.model_copy(
+            update={"neighbor_expansion_enabled": True, "neighbor_window": 1}
+        ),
+        "chunk-v2-link": baseline.model_copy(
+            update={
+                "chunking_version": "markdown-structural-v2",
+                "collection_name": shadow_collection,
+                "link_expansion_enabled": True,
+                "link_expansion_limit": 2,
+            }
+        ),
+        "chunk-v2-no-rerank": baseline.model_copy(
+            update={
+                "chunking_version": "markdown-structural-v2",
+                "collection_name": shadow_collection,
+                "rerank_enabled": False,
+            }
+        ),
+    }

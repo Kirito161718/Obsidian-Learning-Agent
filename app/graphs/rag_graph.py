@@ -71,12 +71,16 @@ class RagWorkflow:
             observe_graph_node("ola.rag.retrieve.merge", nodes.merge_results),
         )
         builder.add_node(
-            "expand_links_placeholder",
-            observe_graph_node("ola.rag.links.expand", nodes.expand_links_placeholder),
+            "expand_links",
+            observe_graph_node("ola.rag.links.expand", nodes.expand_links),
         )
         builder.add_node(
             "rerank_results",
             observe_graph_node("ola.rag.rerank", nodes.rerank_results),
+        )
+        builder.add_node(
+            "expand_neighbors",
+            observe_graph_node("ola.rag.neighbors.expand", nodes.expand_neighbors),
         )
         builder.add_node(
             "build_context",
@@ -112,9 +116,10 @@ class RagWorkflow:
         )
         builder.add_edge("rewrite_query", "retrieve_rewritten_query")
         builder.add_edge("retrieve_rewritten_query", "merge_results")
-        builder.add_edge("merge_results", "expand_links_placeholder")
-        builder.add_edge("expand_links_placeholder", "rerank_results")
-        builder.add_edge("rerank_results", "build_context")
+        builder.add_edge("merge_results", "expand_links")
+        builder.add_edge("expand_links", "rerank_results")
+        builder.add_edge("rerank_results", "expand_neighbors")
+        builder.add_edge("expand_neighbors", "build_context")
         builder.add_conditional_edges(
             "build_context",
             nodes.route_mode,

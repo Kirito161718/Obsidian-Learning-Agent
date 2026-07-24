@@ -10,6 +10,7 @@ from app.db.models import RagRetrievalProfile
 from app.retrieval.configuration import (
     RetrievalProfileConfiguration,
     ablation_configurations,
+    candidate_configurations,
 )
 from app.services.crud_errors import ResourceNotFoundError, ServiceDatabaseError
 
@@ -109,6 +110,44 @@ class RetrievalProfileService:
                 profile_key=f"rag-ablation-{key}",
                 version=version,
                 description=f"Stage 7B isolated ablation: {key}.",
+                configuration=configuration,
+            )
+        return result
+
+    def ensure_candidates(
+        self,
+        db: Session,
+        baseline: RagRetrievalProfile,
+        *,
+        shadow_collection: str,
+    ) -> dict[str, RagRetrievalProfile]:
+        baseline_configuration = RetrievalProfileConfiguration.model_validate(
+            baseline.configuration
+        )
+        variants = candidate_configurations(
+            baseline_configuration,
+            shadow_collection=shadow_collection,
+        )
+        result: dict[str, RagRetrievalProfile] = {}
+        for key, configuration in variants.items():
+            version = f"rag-candidate-{key}-v1"
+            existing = (
+                db.query(RagRetrievalProfile)
+                .filter(RagRetrievalProfile.version == version)
+                .one_or_none()
+            )
+            if existing is not None:
+                if existing.configuration_hash != configuration.content_hash():
+                    raise ValueError(
+                        f"Candidate profile version has different configuration: {version}"
+                    )
+                result[key] = existing
+                continue
+            result[key] = self.create(
+                db,
+                profile_key=f"rag-candidate-{key}",
+                version=version,
+                description=f"Stage 7C evidence-driven candidate: {key}.",
                 configuration=configuration,
             )
         return result

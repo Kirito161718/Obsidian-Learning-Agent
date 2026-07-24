@@ -20,6 +20,7 @@ from app.services.rerank_service import RerankService
 from app.services.vector_service import VectorService
 from app.services.session_memory_service import SessionMemoryService
 from app.services.user_preference_service import UserPreferenceService
+from app.retrieval.expansion import RetrievalExpansionService
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,7 @@ class RagNodes:
         self.session_memory_service = SessionMemoryService(settings)
         self.learning_context_service = LearningContextService(settings)
         self.context_bundle_service = ContextBundleService(settings)
+        self.expansion_service = RetrievalExpansionService(vector_service)
 
     def initialize_state(self, state: RagState) -> RagState:
         question = str(state.get("question") or "")
@@ -299,10 +301,33 @@ class RagNodes:
                 merged[chunk.chunk_id] = existing.model_copy(update={"score": best_score, "metadata": metadata})
         return {"merged_results": list(merged.values())}
 
-    def expand_links_placeholder(self, state: RagState) -> RagState:
+    def expand_links(self, state: RagState) -> RagState:
+        profile = state.get("retrieval_profile") or {}
+        enabled = bool(profile.get("link_expansion_enabled"))
+        expanded = (
+            self.expansion_service.expand_links(
+                list(state["merged_results"]),
+                max_links_per_origin_note=int(
+                    profile.get("link_expansion_limit") or 0
+                ),
+                max_chunks_per_target_note=int(
+                    profile.get("max_chunks_per_note") or 3
+                ),
+            )
+            if enabled
+            else list(state["merged_results"])
+        )
         evaluation = dict(state.get("evaluation_result") or {})
-        evaluation["link_expansion_applied"] = False
-        return {"expanded_results": list(state["merged_results"]), "evaluation_result": evaluation}
+        evaluation.update(
+            {
+                "link_expansion_applied": enabled
+                and len(expanded) > len(state["merged_results"]),
+                "link_expansion_candidate_count": max(
+                    0, len(expanded) - len(state["merged_results"])
+                ),
+            }
+        )
+        return {"expanded_results": expanded, "evaluation_result": evaluation}
 
     def rerank_results(self, state: RagState) -> RagState:
         chunks = state["expanded_results"]
@@ -338,8 +363,38 @@ class RagNodes:
             "rerank_latency_ms": (time.perf_counter() - started) * 1000,
         }
 
+    def expand_neighbors(self, state: RagState) -> RagState:
+        profile = state.get("retrieval_profile") or {}
+        enabled = bool(profile.get("neighbor_expansion_enabled"))
+        expanded = (
+            self.expansion_service.expand_neighbors(
+                list(state["reranked_results"]),
+                window=int(profile.get("neighbor_window") or 0),
+            )
+            if enabled
+            else list(state["reranked_results"])
+        )
+        evaluation = dict(state.get("evaluation_result") or {})
+        evaluation.update(
+            {
+                "neighbor_expansion_applied": enabled
+                and len(expanded) > len(state["reranked_results"]),
+                "neighbor_expansion_candidate_count": max(
+                    0, len(expanded) - len(state["reranked_results"])
+                ),
+            }
+        )
+        return {"reranked_results": expanded, "evaluation_result": evaluation}
+
     def build_context(self, state: RagState) -> RagState:
-        result = self.context_builder.build(state["reranked_results"], max_chunks=state["top_k"])
+        profile = state.get("retrieval_profile") or {}
+        max_chunks = state["top_k"]
+        if profile.get("neighbor_expansion_enabled"):
+            window = int(profile.get("neighbor_window") or 0)
+            max_chunks = min(100, max_chunks * (1 + 2 * window))
+        result = self.context_builder.build(
+            state["reranked_results"], max_chunks=max_chunks
+        )
         bundle = self.context_bundle_service.build(
             user_preferences=state.get("user_preferences"),
             explicit_learning_context=state.get("learning_context"),

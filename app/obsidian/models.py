@@ -93,3 +93,7 @@ class ObsidianChunk:
     tags: tuple[str, ...] = ()
     links: tuple[dict[str, Any], ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
+    chunking_version: str = "markdown-structural-v1"
+    structural_id: str | None = None
+    previous_sibling_id: str | None = None
+    next_sibling_id: str | None = None

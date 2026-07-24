@@ -40,6 +40,7 @@ class VectorService:
             **qdrant_transport_kwargs(settings.qdrant_url),
         )
         self.vector_size = vector_size
+        self._obsidian_payload_cache: list[dict] | None = None
         if ensure_collection:
             if vector_size is None:
                 raise ValueError("vector_size is required when ensuring a Qdrant collection")
@@ -102,6 +103,7 @@ class VectorService:
                 wait=True,
             )
         )
+        self._obsidian_payload_cache = None
 
     def list_obsidian_chunks(self, note_id: str, note_hash: str | None = None) -> list[dict]:
         conditions = [
@@ -129,6 +131,38 @@ class VectorService:
                 break
         chunks.sort(key=lambda payload: int(payload.get("chunk_index", 0)))
         return chunks
+
+    def list_all_obsidian_chunks(self, *, refresh: bool = False) -> list[dict]:
+        """Return a collection-local payload catalog used by bounded expansions."""
+        if self._obsidian_payload_cache is not None and not refresh:
+            return [dict(item) for item in self._obsidian_payload_cache]
+        query_filter = Filter(
+            must=[FieldCondition(key="source_type", match=MatchValue(value="obsidian_note"))]
+        )
+        chunks: list[dict] = []
+        offset = None
+        while True:
+            points, offset = self._with_retry(
+                lambda: self.client.scroll(
+                    collection_name=self.collection_name,
+                    scroll_filter=query_filter,
+                    limit=256,
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=False,
+                )
+            )
+            chunks.extend(dict(point.payload or {}) for point in points)
+            if offset is None:
+                break
+        chunks.sort(
+            key=lambda payload: (
+                str(payload.get("source_id") or ""),
+                int(payload.get("chunk_index") or 0),
+            )
+        )
+        self._obsidian_payload_cache = chunks
+        return [dict(item) for item in chunks]
 
     def list_chunks_by_document_id(self, document_id: str) -> list[dict]:
         query_filter = Filter(
@@ -220,6 +254,11 @@ class VectorService:
                         "block_types": list(chunk.block_types),
                         "content_hash": chunk.content_hash,
                         "parent_section_id": chunk.parent_section_id,
+                        "chunking_version": chunk.chunking_version,
+                        "structural_id": chunk.structural_id,
+                        "previous_sibling_id": chunk.previous_sibling_id,
+                        "next_sibling_id": chunk.next_sibling_id,
+                        "chunk_metadata": dict(chunk.metadata),
                         "tags": list(chunk.tags),
                         "links": list(chunk.links),
                         "chunk_index": chunk.chunk_index,
@@ -232,6 +271,7 @@ class VectorService:
             self._with_retry(
                 lambda: self.client.upsert(collection_name=self.collection_name, points=points, wait=True)
             )
+            self._obsidian_payload_cache = None
 
     def search(
         self,

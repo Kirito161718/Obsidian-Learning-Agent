@@ -14,6 +14,7 @@ from app.rag_evaluation.dataset_validator import DatasetValidator, build_vault_c
 from app.rag_evaluation.experiment_service import ExperimentService
 from app.rag_evaluation.production_adapter import ProductionRagEvaluationAdapter
 from app.rag_evaluation.runner import EvaluationRunner
+from app.rag_evaluation.shadow_collection import ShadowCollectionService
 from app.retrieval.profiles import RetrievalProfileService
 from app.schemas.rag_evaluation import ExperimentOut
 
@@ -41,6 +42,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     compare = subparsers.add_parser("compare")
     compare.add_argument("experiment_ids", nargs="+")
+    prepare_shadow = subparsers.add_parser("prepare-shadow")
+    prepare_shadow.add_argument("--dataset-file")
+    prepare_shadow.add_argument("--collection")
+    prepare_shadow.add_argument("--replace", action="store_true")
+    analyze_chunks = subparsers.add_parser("analyze-chunks")
+    analyze_chunks.add_argument("--collection")
     return parser
 
 
@@ -120,6 +127,58 @@ def main(argv: list[str] | None = None) -> int:
                     indent=2,
                 )
             )
+            return 0
+
+        if args.command == "analyze-chunks":
+            collection_name = args.collection or settings.qdrant_collection
+            print(
+                json.dumps(
+                    {
+                        "collection_name": collection_name,
+                        "statistics": ShadowCollectionService(settings).analyze(
+                            collection_name=collection_name
+                        ),
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return 0
+
+        if args.command == "prepare-shadow":
+            file_name = _dataset_file(loader, args.dataset_file)
+            dataset = loader.load(file_name)
+            validation = DatasetValidator(
+                build_vault_catalog(db, settings)
+            ).validate(dataset)
+            record = service.register_dataset(
+                db,
+                dataset=dataset,
+                dataset_file=file_name,
+                validation=validation,
+            )
+            if not validation.valid:
+                raise SystemExit("Dataset validation failed")
+            shadow_service = ShadowCollectionService(settings)
+            collection_name = args.collection or shadow_service.default_name(
+                record.content_hash
+            )
+            result = shadow_service.prepare(
+                db,
+                collection_name=collection_name,
+                replace=args.replace,
+            )
+            profile_service = RetrievalProfileService(settings)
+            baseline = profile_service.ensure_baseline(db)
+            candidates = profile_service.ensure_candidates(
+                db,
+                baseline,
+                shadow_collection=collection_name,
+            )
+            result["profiles"] = {
+                key: profile.version for key, profile in candidates.items()
+            }
+            print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
 
         file_name = _dataset_file(loader, args.dataset_file)
