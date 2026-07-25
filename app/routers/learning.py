@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db.database import get_db
+from app.db.models import RagRetrievalProfile
 from app.routers.qa import parse_source_chunks, sanitize_source_chunk
 from app.schemas.learning import (
     LearningSessionCreate,
@@ -36,11 +37,19 @@ review_service = LearningReviewService()
 
 
 @router.get("/learning", response_class=HTMLResponse, include_in_schema=False)
-def learning_workspace(request: Request) -> HTMLResponse:
+def learning_workspace(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    active_profile = (
+        db.query(RagRetrievalProfile)
+        .filter(RagRetrievalProfile.is_active.is_(True))
+        .one_or_none()
+    )
     return templates.TemplateResponse(
         request,
         "learning.html",
-        {"obsidian_vault_name": settings.obsidian_vault_path.name if settings.obsidian_vault_path else ""},
+        {
+            "obsidian_vault_name": settings.obsidian_vault_path.name if settings.obsidian_vault_path else "",
+            "active_profile": active_profile.version if active_profile else "未设置",
+        },
     )
 
 

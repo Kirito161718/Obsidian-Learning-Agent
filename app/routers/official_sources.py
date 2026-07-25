@@ -16,6 +16,8 @@ from app.schemas.official_sources import (
     OfficialSourceCreate,
     OfficialSourceOut,
     OfficialSourcePatch,
+    OfficialSourceReminderPatch,
+    OfficialReminderSummaryOut,
     SnapshotOut,
 )
 from app.services.approval_service import ApprovalService
@@ -23,6 +25,7 @@ from app.services.note_version_service import NoteVersionService
 from app.services.official_audit_service import OfficialAuditService
 from app.services.official_maintenance_service import OfficialMaintenanceService
 from app.services.official_source_service import OfficialFetchService, OfficialSourceService
+from app.services.official_reminder_service import OfficialReminderService
 from app.services.update_proposal_service import UpdateProposalService
 
 settings = get_settings()
@@ -53,6 +56,20 @@ def get_source(source_id: str, db: Session = Depends(get_db)) -> object:
 @router.patch("/sources/{source_id}", response_model=OfficialSourceOut)
 def patch_source(source_id: str, payload: OfficialSourcePatch, db: Session = Depends(get_db)) -> object:
     return OfficialSourceService().update(db, source_id, payload)
+
+
+@router.get("/reminders/summary", response_model=OfficialReminderSummaryOut)
+def reminder_summary(db: Session = Depends(get_db)) -> dict:
+    return OfficialReminderService().summary(db)
+
+
+@router.patch("/sources/{source_id}/reminder", response_model=OfficialSourceOut)
+def patch_source_reminder(
+    source_id: str,
+    payload: OfficialSourceReminderPatch,
+    db: Session = Depends(get_db),
+) -> object:
+    return OfficialReminderService().update(db, source_id, payload)
 
 
 @router.post("/sources/{source_id}/disable", response_model=OfficialSourceOut)

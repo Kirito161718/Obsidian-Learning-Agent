@@ -15,7 +15,7 @@ from app.db.database import init_db
 from app.mcp.client_manager import MCPClientManager
 from app.observability import get_observability
 from app.official_sources.errors import OfficialSourceError
-from app.routers import admin, agent, documents, goals, learning, learning_status, mcp, obsidian, official_sources, qa, rag, rag_evaluation
+from app.routers import admin, agent, documents, goals, home, learning, learning_status, mcp, obsidian, official_sources, qa, rag, rag_evaluation
 from app.services.crud_errors import ResourceNotFoundError, ServiceDatabaseError
 from app.services.rag_model_runtime import (
     prewarm_rag_models,
@@ -104,6 +104,7 @@ async def service_database_error_handler(
 
 
 app.include_router(documents.router)
+app.include_router(home.router)
 app.include_router(rag.router)
 app.include_router(qa.router)
 app.include_router(goals.router)

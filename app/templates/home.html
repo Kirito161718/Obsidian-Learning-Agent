@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Obsidian Learning Agent</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='navigation.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='home.css') }}">
+</head>
+<body>
+  <header class="home-header">
+    <div>
+      <p class="eyebrow">Obsidian Learning Agent</p>
+      <h1>学习与资料状态</h1>
+      <p>查看需要处理的事项，然后继续提问、扫描 Vault 或检查官方资料。</p>
+    </div>
+    {% include "_navigation.html" %}
+  </header>
+  <main>
+    <section class="summary-grid" aria-label="核心状态">
+      <article><span>当前 RAG Profile</span><strong>{{ active_profile }}</strong></article>
+      <article><span>已索引笔记</span><strong>{{ indexed_notes }}</strong></article>
+      <article class="{{ 'attention' if reminder_attention_count else '' }}"><span>需要检查的官方来源</span><strong>{{ reminder_attention_count }}</strong></article>
+      <article class="{{ 'attention' if pending_proposal_count else '' }}"><span>待审批 Proposal</span><strong>{{ pending_proposal_count }}</strong></article>
+      <article class="{{ 'danger' if index_anomalies else '' }}"><span>索引异常</span><strong>{{ index_anomalies }}</strong></article>
+    </section>
+
+    <section class="panel">
+      <h2>快捷入口</h2>
+      <div class="quick-actions">
+        <a class="primary" href="/learning">开始提问</a>
+        <a href="/admin#obsidianPanel">扫描 Vault</a>
+        <a href="/official#reminders">检查到期资料</a>
+        <a href="/official#proposals">查看待审批 Proposal</a>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>最近运行状态</h2>
+      {% if recent_runs %}
+      <ul class="run-list">
+        {% for run in recent_runs %}
+        <li>
+          <span>{{ run.run_type }}</span>
+          <strong class="run-status {{ run.status }}">{{ run.status }}</strong>
+          <time>{{ run.created_at.strftime("%Y-%m-%d %H:%M") }}</time>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="empty">暂无运行记录。</p>
+      {% endif %}
+    </section>
+  </main>
+</body>
+</html>

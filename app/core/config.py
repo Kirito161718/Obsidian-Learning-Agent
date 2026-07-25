@@ -126,6 +126,8 @@ class Settings(BaseSettings):
     official_html_max_chars: int = Field(default=500_000, ge=1000, le=5_000_000)
     official_pdf_max_pages: int = Field(default=300, ge=1, le=1000)
     official_snapshot_keep: int = Field(default=5, ge=1, le=100)
+    official_reminder_overdue_grace_days: int = Field(default=7, ge=1, le=365)
+    official_reminder_batch_limit: int = Field(default=10, ge=1, le=10)
     note_version_keep: int = Field(default=10, ge=1, le=1000)
     update_proposal_retention_days: int = Field(default=30, ge=1, le=3650)
     official_audit_max_linked_notes: int = Field(default=10, ge=1, le=100)

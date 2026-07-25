@@ -4,15 +4,40 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>官方资料校验</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='navigation.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', path='official_sources.css') }}">
 </head>
 <body>
   <header class="page-header">
     <div><h1>官方资料校验</h1><p>手动登记、抓取、审阅完整 Diff，并对全部修改作一次性高风险决策。</p></div>
-    <nav><a href="/admin">调试后台</a><a href="/learning">学习工作台</a><a href="/agent">Agent 控制台</a></nav>
+    {% include "_navigation.html" %}
   </header>
   <main>
     <div id="message" class="message" hidden></div>
+    <section id="reminders" class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>资料检查提醒</h2>
+          <p>提醒只根据上次手动检查时间计算，不会在后台访问任何网站。</p>
+        </div>
+        <div class="action-row">
+          <button id="refreshReminders" type="button">刷新状态</button>
+          <button id="auditDueBtn" type="button">一键检查所有到期来源</button>
+        </div>
+      </div>
+      <div id="reminderSummary" class="summary-grid" aria-live="polite">
+        <div><span>来源</span><strong>—</strong></div>
+        <div><span>到期</span><strong>—</strong></div>
+        <div><span>逾期</span><strong>—</strong></div>
+        <div><span>待审批</span><strong>—</strong></div>
+      </div>
+      <div id="batchProgress" class="progress-box" hidden>
+        <div class="progress-track"><span id="batchProgressBar"></span></div>
+        <p id="batchProgressText"></p>
+        <div id="batchResults"></div>
+      </div>
+    </section>
+
     <section class="panel">
       <h2>登记公开官方来源</h2>
       <form id="sourceForm" class="grid">
@@ -23,10 +48,10 @@
         <button type="submit">登记来源</button>
       </form>
       <p class="hint">不接受 Header、Cookie、Authorization、本地文件路径或登录站点。</p>
-      <div class="table-wrap"><table><thead><tr><th>来源</th><th>Host / 类型</th><th>状态</th><th>最近检查</th><th>操作</th></tr></thead><tbody id="sourcesBody"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>来源</th><th>状态</th><th>下次建议检查</th><th>提醒设置</th><th>最近结果</th><th>操作</th></tr></thead><tbody id="sourcesBody"></tbody></table></div>
     </section>
 
-    <section class="panel">
+    <section id="proposals" class="panel">
       <h2>关联 Obsidian 笔记</h2>
       <form id="linkForm" class="grid">
         <label>Source<select id="linkSource" required></select></label>
