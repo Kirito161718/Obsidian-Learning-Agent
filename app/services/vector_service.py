@@ -1,6 +1,8 @@
 import time
 import logging
 from collections.abc import Callable
+from functools import lru_cache
+from threading import Lock
 from typing import TypeVar
 from urllib.parse import urlparse
 from uuid import NAMESPACE_URL, uuid5
@@ -14,6 +16,9 @@ from app.services.chunk_service import Chunk
 
 T = TypeVar("T")
 logger = logging.getLogger(__name__)
+_client_lock = Lock()
+_created_clients: list[QdrantClient] = []
+_client_registry: dict[tuple, QdrantClient] = {}
 
 
 def qdrant_transport_kwargs(url: str) -> dict[str, bool]:
@@ -22,23 +27,73 @@ def qdrant_transport_kwargs(url: str) -> dict[str, bool]:
     return {"trust_env": False} if host in {"127.0.0.1", "::1", "localhost"} else {}
 
 
+@lru_cache
+def _cached_qdrant_client(
+    client_type: type,
+    url: str,
+    api_key: str | None,
+    prefer_grpc: bool,
+    grpc_port: int,
+) -> QdrantClient:
+    key = (client_type, url, api_key, prefer_grpc, grpc_port)
+    with _client_lock:
+        existing = _client_registry.get(key)
+        if existing is not None:
+            return existing
+        client = client_type(
+            url=url,
+            api_key=api_key or None,
+            timeout=30,
+            prefer_grpc=prefer_grpc,
+            grpc_port=grpc_port,
+            **qdrant_transport_kwargs(url),
+        )
+        _client_registry[key] = client
+        _created_clients.append(client)
+    return client
+
+
+def get_qdrant_client() -> QdrantClient:
+    settings = get_settings()
+    return _cached_qdrant_client(
+        QdrantClient,
+        settings.qdrant_url,
+        settings.qdrant_api_key or None,
+        settings.qdrant_prefer_grpc,
+        settings.qdrant_grpc_port,
+    )
+
+
+def qdrant_client_cache_size() -> int:
+    return _cached_qdrant_client.cache_info().currsize
+
+
+def close_qdrant_clients() -> None:
+    with _client_lock:
+        clients = list(_created_clients)
+        _created_clients.clear()
+        _client_registry.clear()
+    for client in clients:
+        close = getattr(client, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:
+                logger.warning("Failed to close Qdrant client", exc_info=True)
+    _cached_qdrant_client.cache_clear()
+
+
 class VectorService:
     def __init__(
         self,
         vector_size: int | None = None,
         ensure_collection: bool = True,
         collection_name: str | None = None,
+        client: QdrantClient | None = None,
     ) -> None:
         settings = get_settings()
         self.collection_name = collection_name or settings.qdrant_collection
-        self.client = QdrantClient(
-            url=settings.qdrant_url,
-            api_key=settings.qdrant_api_key or None,
-            timeout=30,
-            prefer_grpc=settings.qdrant_prefer_grpc,
-            grpc_port=settings.qdrant_grpc_port,
-            **qdrant_transport_kwargs(settings.qdrant_url),
-        )
+        self.client = client or get_qdrant_client()
         self.vector_size = vector_size
         self._obsidian_payload_cache: list[dict] | None = None
         if ensure_collection:

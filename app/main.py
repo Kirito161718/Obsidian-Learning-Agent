@@ -15,12 +15,15 @@ from app.db.database import init_db
 from app.mcp.client_manager import MCPClientManager
 from app.observability import get_observability
 from app.official_sources.errors import OfficialSourceError
-from app.routers import admin, agent, documents, goals, home, learning, learning_status, mcp, obsidian, official_sources, qa, rag, rag_evaluation
+from app.routers import admin, agent, documents, goals, home, learning, learning_status, mcp, obsidian, official_sources, qa, rag, rag_evaluation, system
 from app.services.crud_errors import ResourceNotFoundError, ServiceDatabaseError
 from app.services.rag_model_runtime import (
     prewarm_rag_models,
     rag_model_runtime_status,
+    shutdown_rag_models,
 )
+from app.services.vector_service import close_qdrant_clients
+from app.routers.rag import shutdown_rag_service
 
 setup_logging()
 settings = get_settings()
@@ -52,6 +55,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             app.state.observability.flush,
             settings.langsmith_flush_timeout_seconds,
         )
+        shutdown_rag_service()
+        await asyncio.to_thread(close_qdrant_clients)
+        await asyncio.to_thread(shutdown_rag_models)
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
@@ -116,3 +122,4 @@ app.include_router(admin.router)
 app.include_router(agent.router)
 app.include_router(rag_evaluation.router)
 app.include_router(mcp.router)
+app.include_router(system.router)

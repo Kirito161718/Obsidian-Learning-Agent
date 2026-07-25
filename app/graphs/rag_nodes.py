@@ -27,6 +27,10 @@ from app.retrieval.safety_templates import SAFE_REFUSAL
 logger = logging.getLogger(__name__)
 
 NO_CONTEXT_ANSWER = SAFE_REFUSAL
+CONFLICT_CITATION_FAILURE_ANSWER = (
+    "资料之间可能存在冲突，但当前回答未能通过引用校验，"
+    "因此无法可靠说明各方观点。"
+)
 CITATION_PATTERN = re.compile(r"\[来源(\d+)]")
 REFERENTIAL_TERMS = ("这个", "那个", "它", "上面", "前面", "刚才", "该内容")
 
@@ -703,13 +707,16 @@ class RagNodes:
         invalid = list(
             state.get("evaluation_result", {}).get("invalid_citations") or []
         )
-        if not profile.get("post_citation_gate_enabled"):
+        uncertainty_answer = (
+            state.get("answer_policy") == "answer_with_uncertainty"
+        )
+        if not profile.get("post_citation_gate_enabled") and not uncertainty_answer:
             return {"citation_gate_passed": not bool(invalid)}
         substantive = CITATION_PATTERN.sub(
             "", str(state.get("answer") or "")
         ).strip()
         uncertainty_has_multiple_sources = (
-            state.get("answer_policy") != "answer_with_uncertainty"
+            not uncertainty_answer
             or len(
                 {
                     str(item.get("source_id") or "")
@@ -736,7 +743,11 @@ class RagNodes:
         reasons = list(state.get("evidence_reason_codes") or [])
         reasons.append("citation_support_missing")
         return {
-            "answer": NO_CONTEXT_ANSWER,
+            "answer": (
+                CONFLICT_CITATION_FAILURE_ANSWER
+                if uncertainty_answer
+                else NO_CONTEXT_ANSWER
+            ),
             "answerable": False,
             "answer_policy": "abstain",
             "evidence_confidence_band": "low",

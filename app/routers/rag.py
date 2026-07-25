@@ -1,6 +1,7 @@
 from functools import lru_cache
 import inspect
 import logging
+from threading import Lock
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -16,19 +17,34 @@ from app.services.vector_service import VectorService
 
 router = APIRouter(prefix="/rag", tags=["rag"])
 logger = logging.getLogger(__name__)
+_rag_service_lock = Lock()
+_rag_service_instance: RagService | None = None
 RAG_UNAVAILABLE_DETAIL = "RAG service is temporarily unavailable. Please check Qdrant and retrieval dependencies."
 LLM_UNAVAILABLE_DETAIL = "LLM service is temporarily unavailable"
 
 
 @lru_cache
 def get_rag_service() -> RagService:
-    embedding_service = get_embedding_service()
-    return RagService(
-        embedding_service=embedding_service,
-        vector_service=VectorService(vector_size=embedding_service.vector_size),
-        rerank_service=get_rerank_service(),
-        llm_client=DeepSeekClient(),
-    )
+    global _rag_service_instance
+    with _rag_service_lock:
+        if _rag_service_instance is None:
+            embedding_service = get_embedding_service()
+            _rag_service_instance = RagService(
+                embedding_service=embedding_service,
+                vector_service=VectorService(
+                    vector_size=embedding_service.vector_size
+                ),
+                rerank_service=get_rerank_service(),
+                llm_client=DeepSeekClient(),
+            )
+        return _rag_service_instance
+
+
+def shutdown_rag_service() -> None:
+    global _rag_service_instance
+    with _rag_service_lock:
+        _rag_service_instance = None
+        get_rag_service.cache_clear()
 
 
 @router.post("/ask", response_model=AskResponse)

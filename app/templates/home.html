@@ -35,6 +35,17 @@
       </div>
     </section>
 
+    <section class="panel" aria-labelledby="systemStatusHeading">
+      <div class="panel-heading">
+        <div>
+          <h2 id="systemStatusHeading">系统状态</h2>
+          <p id="systemStatusSummary" class="empty">正在执行安全的只读检查…</p>
+        </div>
+        <a class="diagnostic-link" href="/system/status" target="_blank" rel="noreferrer">运行诊断</a>
+      </div>
+      <div id="systemStatusItems" class="system-status-grid" aria-live="polite"></div>
+    </section>
+
     <section class="panel">
       <h2>最近运行状态</h2>
       {% if recent_runs %}
@@ -52,5 +63,6 @@
       {% endif %}
     </section>
   </main>
+  <script src="{{ url_for('static', path='home.js') }}"></script>
 </body>
 </html>
