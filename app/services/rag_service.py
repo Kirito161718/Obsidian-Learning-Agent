@@ -106,6 +106,8 @@ class RagService:
         return AskResponse(
             answer=state.get("answer") or NO_CONTEXT_ANSWER,
             sources=sources,
+            answer_policy=state.get("answer_policy"),
+            evidence_confidence_band=state.get("evidence_confidence_band"),
             session_id=request.session_id,
             qa_history_id=state.get("qa_history_id"),
             learning_context_applied=bool(state.get("learning_context")),

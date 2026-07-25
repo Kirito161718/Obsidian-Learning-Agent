@@ -6,6 +6,7 @@ const state = {
   learningStatuses: [],
   currentSession: null,
   currentSources: [],
+  questionBusy: false,
 };
 
 const el = Object.fromEntries([
@@ -46,6 +47,9 @@ async function requestJson(url, options = {}) {
 
 function setBusy(button, busy) {
   button.disabled = busy || !state.currentSession;
+  if (button === el.submitQuestionBtn) {
+    button.textContent = busy ? "处理中…" : "发送";
+  }
 }
 
 function sourceTypesForScope(scope) {
@@ -199,9 +203,10 @@ async function loadMessages() {
 
 async function submitQuestion(event) {
   event.preventDefault();
-  if (!state.currentSession) return;
+  if (!state.currentSession || state.questionBusy) return;
   const question = el.questionInput.value.trim();
   if (!question) return;
+  state.questionBusy = true;
   setBusy(el.submitQuestionBtn, true);
   showError("");
   try {
@@ -215,6 +220,16 @@ async function submitQuestion(event) {
       el.rewriteStatus.textContent = `Run ${response.run_id || "-"} · 用户偏好已加载 · Session Memory ${memoryTurns} 轮 · Context ${truncated ? "已截断" : "未截断"}`;
       el.questionInput.value = "";
       await loadMessages();
+      if (!response.qa_history_id) {
+        el.messageList.insertAdjacentHTML("beforeend", `
+          <article class="message assistant ${response.answer_policy === "abstain" ? "abstention" : ""}">
+            <div class="message-label">知识库回答</div>
+            <div class="message-body">${citationHtml(response.answer)}</div>
+          </article>`);
+      }
+      renderAnswerStatus(response);
+      state.currentSources = response.sources || [];
+      renderSources(state.currentSources);
       await loadSessions(state.currentSession.id);
     } else {
       const memoryTurns = response.context_manifest?.session_memory?.turns || 0;
@@ -224,7 +239,28 @@ async function submitQuestion(event) {
       el.messageList.insertAdjacentHTML("beforeend", `<article class="message user"><div class="message-label">仅检索</div><div class="message-body">${escapeHtml(question)}</div></article><article class="message assistant"><div class="message-body">检索到 ${state.currentSources.length} 个 Chunk；未生成答案，也未写问答历史。</div></article>`);
     }
   } catch (error) { showError(error.message); }
-  finally { setBusy(el.submitQuestionBtn, false); }
+  finally {
+    state.questionBusy = false;
+    setBusy(el.submitQuestionBtn, false);
+  }
+}
+
+function renderAnswerStatus(response) {
+  const lastAnswer = [...el.messageList.querySelectorAll(".message.assistant")].pop();
+  if (!lastAnswer) return;
+  if (response.answer_policy === "abstain") {
+    lastAnswer.classList.add("abstention");
+    lastAnswer.insertAdjacentHTML(
+      "afterbegin",
+      '<div class="answer-notice refusal">本地资料不足，系统已安全拒答。</div>',
+    );
+  } else if (response.answer_policy === "answer_with_uncertainty") {
+    lastAnswer.classList.add("uncertain");
+    lastAnswer.insertAdjacentHTML(
+      "afterbegin",
+      '<div class="answer-notice uncertainty">资料存在冲突或支持有限，请结合引用核对。</div>',
+    );
+  }
 }
 
 function renderSources(sources) {
@@ -239,11 +275,9 @@ function renderSources(sources) {
       <strong>[来源${sourceIndex}] ${escapeHtml(source.source_name || source.filename || "未命名来源")}</strong>
       <div class="source-meta">
         <span>类型：${escapeHtml(source.source_type || "uploaded_document")}</span>
-        ${source.source_path ? `<span>相对路径：${escapeHtml(source.source_path)}</span>` : ""}
-        <span>标题层级：${escapeHtml((source.heading_path || []).join(" › ") || source.section_title || "-")}</span>
-        <span>行号：${escapeHtml(source.line_start ?? "-")}～${escapeHtml(source.line_end ?? "-")}</span>
-        <span>Tags：${escapeHtml((source.tags || []).join(", ") || "-")}</span>
-        <span>相似度：${escapeHtml(source.score ?? "-")} · Rerank：${escapeHtml(source.rerank_score ?? "-")}</span>
+        <span>笔记标题：${escapeHtml(source.source_name || source.filename || "未命名来源")}</span>
+        <span>章节：${escapeHtml((source.heading_path || []).join(" › ") || source.section_title || "未标注章节")}</span>
+        <span>相关度：${escapeHtml(source.rerank_score ?? source.score ?? "-")}</span>
       </div>
       ${uri ? `<a class="button secondary" href="${escapeHtml(uri)}">在 Obsidian 中打开</a>` : ""}
       <div class="source-text">${escapeHtml(source.text || "")}</div>

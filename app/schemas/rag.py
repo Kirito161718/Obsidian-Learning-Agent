@@ -71,6 +71,8 @@ class SourceChunk(BaseModel):
 class AskResponse(BaseModel):
     answer: str
     sources: list[SourceChunk]
+    answer_policy: str | None = None
+    evidence_confidence_band: str | None = None
     session_id: str | None = None
     qa_history_id: str | None = None
     learning_context_applied: bool = False

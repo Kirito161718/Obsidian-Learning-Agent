@@ -21,6 +21,11 @@ class OfficialSourcePatch(StrictModel):
     enabled: bool | None = None
 
 
+class OfficialSourceReminderPatch(StrictModel):
+    reminder_enabled: bool
+    check_interval_days: int = Field(ge=1, le=365)
+
+
 class OfficialSourceOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -33,6 +38,8 @@ class OfficialSourceOut(BaseModel):
     content_selector: str | None
     enabled: bool
     status: str
+    reminder_enabled: bool
+    check_interval_days: int
     last_checked_at: datetime | None
     last_success_at: datetime | None
     last_error_code: str | None
@@ -77,3 +84,34 @@ class SnapshotOut(BaseModel):
 
 class CleanupRequest(StrictModel):
     dry_run: bool = True
+
+
+ReminderStatus = Literal[
+    "disabled",
+    "never_checked",
+    "current",
+    "due",
+    "overdue",
+    "error",
+]
+
+
+class OfficialSourceReminderOut(BaseModel):
+    id: str
+    name: str
+    reminder_status: ReminderStatus
+    check_interval_days: int
+    last_checked_at: datetime | None
+    next_suggested_check_at: datetime | None
+    last_error_code: str | None
+
+
+class OfficialReminderSummaryOut(BaseModel):
+    total_sources: int
+    due_count: int
+    overdue_count: int
+    never_checked_count: int
+    error_count: int
+    pending_proposal_count: int
+    batch_limit: int
+    sources: list[OfficialSourceReminderOut]

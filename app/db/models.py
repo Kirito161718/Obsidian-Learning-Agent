@@ -365,6 +365,8 @@ class OfficialSource(Base):
     content_selector: Mapped[str | None] = mapped_column(String(500), nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", index=True)
+    reminder_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    check_interval_days: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
     last_checked_at: Mapped[datetime | None] = mapped_column(PRECISE_DATETIME, nullable=True)
     last_success_at: Mapped[datetime | None] = mapped_column(PRECISE_DATETIME, nullable=True)
     last_error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)

@@ -9,6 +9,8 @@
 
 阶段 6 增加用户手动登记的公开官方来源、受限抓取与 Snapshot、Source-Note Link、结构化 Evidence Proposal、MySQL 持久化 LangGraph 审批、写前 Hash stale 校验、Note Version、整批原子写入/回滚和单笔记 Reindex。访问 `http://127.0.0.1:8000/official` 管理；完整安全边界见 [`docs/OFFICIAL_SOURCE_AUDIT_AND_APPROVAL.md`](docs/OFFICIAL_SOURCE_AUDIT_AND_APPROVAL.md)。该能力不自动抓取、不支持部分批准，也不通过 MCP 暴露写工具。
 
+阶段 8 正式使用已通过晋级门槛的 `rag-safe-v1`，新增纯提示型官方资料到期提醒、用户点击后顺序执行的一键检查，以及面向日常使用的首页和统一导航。访问 `http://127.0.0.1:8000/` 查看核心状态；提醒不会启动后台抓取，检查仍复用阶段 6 Audit/Proposal/Approval。详情见 [`docs/REMINDERS_AND_USER_EXPERIENCE.md`](docs/REMINDERS_AND_USER_EXPERIENCE.md)。
+
 ## 1. 项目介绍
 
 这是一个基于 FastAPI 的企业文档 RAG 知识库问答系统 MVP，支持上传 PDF、DOCX、TXT、CSV 文档，解析后切分为 chunk，使用本地 BAAI/bge-m3 生成 embedding，写入 Qdrant 向量库，并通过 DeepSeek API 基于检索结果生成带引用来源的答案。
@@ -147,6 +149,8 @@ DELETE /learning-status/{status_id}
 | `OFFICIAL_FETCH_MAX_REDIRECTS` | 同 Host 重定向上限 | `3` |
 | `OFFICIAL_FETCH_MAX_BYTES` | 官方来源最大响应字节数 | `10485760` |
 | `OFFICIAL_SNAPSHOT_KEEP` | 每个来源默认保留的未引用快照数 | `5` |
+| `OFFICIAL_REMINDER_OVERDUE_GRACE_DAYS` | 建议检查时间之后进入逾期状态的宽限天数 | `7` |
+| `OFFICIAL_REMINDER_BATCH_LIMIT` | 页面一次顺序检查的最大来源数（上限固定为 10） | `10` |
 | `NOTE_VERSION_KEEP` | 每篇笔记默认保留的未固定版本数 | `10` |
 | `APPROVAL_EXPIRES_HOURS` | 高风险审批有效小时数 | `24` |
 | `OFFICIAL_CHECKPOINT_ENABLED` | 是否启用 MySQL 审批 Checkpointer | `true` |
@@ -160,7 +164,7 @@ DELETE /learning-status/{status_id}
 
 ## 官方资料校验与审批
 
-在 `/official` 手动完成 Source 登记、Fetch、Note Link、Audit、完整 Diff 审阅与整批批准/拒绝。Apply 前会再次核对全部笔记 Hash，先创建 Before Version，再原子替换并单笔记 Reindex；任意 stale 会阻止整批写入。默认 HTTPS，公开来源内容按不可信数据处理。详情见 [`docs/OFFICIAL_SOURCE_AUDIT_AND_APPROVAL.md`](docs/OFFICIAL_SOURCE_AUDIT_AND_APPROVAL.md)。
+在 `/official` 查看到期提醒，并手动完成 Source 登记、单来源或到期来源顺序 Audit、Note Link、完整 Diff 审阅与整批批准/拒绝。提醒和页面加载不会抓取；只有用户点击检查才调用现有 Audit API。Apply 前会再次核对全部笔记 Hash，先创建 Before Version，再原子替换并单笔记 Reindex；任意 stale 会阻止整批写入。默认 HTTPS，公开来源内容按不可信数据处理。详情见 [`docs/OFFICIAL_SOURCE_AUDIT_AND_APPROVAL.md`](docs/OFFICIAL_SOURCE_AUDIT_AND_APPROVAL.md) 和 [`docs/REMINDERS_AND_USER_EXPERIENCE.md`](docs/REMINDERS_AND_USER_EXPERIENCE.md)。
 
 ## 只读 MCP
 
