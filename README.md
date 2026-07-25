@@ -11,6 +11,36 @@
 
 阶段 8 正式使用已通过晋级门槛的 `rag-safe-v1`，新增纯提示型官方资料到期提醒、用户点击后顺序执行的一键检查，以及面向日常使用的首页和统一导航。访问 `http://127.0.0.1:8000/` 查看核心状态；提醒不会启动后台抓取，检查仍复用阶段 6 Audit/Proposal/Approval。详情见 [`docs/REMINDERS_AND_USER_EXPERIENCE.md`](docs/REMINDERS_AND_USER_EXPERIENCE.md)。
 
+阶段 9 完成本地主线收尾：Reranker 支持 `auto/cpu/cuda` 与 CUDA→CPU fail-open，模型、Qdrant Client 和 RAG Graph 进程内复用，增加安全预热、`/system/status`、首页系统状态卡，以及 Windows 诊断/启动/停止/状态/清理脚本。运维见 [`docs/LOCAL_OPERATIONS.md`](docs/LOCAL_OPERATIONS.md)，架构和面试材料见 [`docs/PROJECT_OVERVIEW_AND_INTERVIEW.md`](docs/PROJECT_OVERVIEW_AND_INTERVIEW.md)。
+
+## Windows 快速启动
+
+标准拓扑使用 Windows `MySQL80`、Docker Qdrant 和本地 FastAPI。脚本不会启动 Docker MySQL：
+
+```powershell
+.\scripts\doctor.ps1
+.\scripts\start.ps1 -Prewarm
+.\scripts\status.ps1
+.\scripts\stop.ps1
+```
+
+首页为 `http://127.0.0.1:8000/`。详细只读诊断为 `GET /system/status`；清理默认只 Dry Run，实际执行必须显式使用 `.\scripts\cleanup.ps1 -Apply`。
+
+当前功能包括 Obsidian 增量索引、上传文档 RAG、Evidence Sufficiency Gate、冲突不确定回答与当前 Context 引用、学习 Session/目标/状态、分层 Memory、只读 Tool Registry/MCP、LangSmith 安全观测、RAG 固定数据集评估，以及官方资料 Proposal/Approval/Version/原子写回。
+
+主要页面入口：
+
+- `/`：日常概览和系统状态；
+- `/learning`：学习会话与问答；
+- `/official`：官方资料提醒、审计和 Proposal；
+- `/agent`：Memory、工具、MCP、Run History 和清理；
+- `/agent/rag-evaluation`：高级 RAG 评估；
+- `/admin`：文档、索引与检索调试。
+
+本地系统要求为 Windows PowerShell 5.1、Python 3.11+ 虚拟环境、Windows MySQL80、Docker Desktop/Qdrant，以及可选 NVIDIA CUDA Torch。当前不实现 Hybrid Search、MMR、Parent-Child Retrieval、后台自动抓取/调度、模型自主工具调用、完整插件/Skill 生命周期、Obsidian 原生插件、新前端框架或云部署。
+
+项目截图建议人工放入 `docs/images/`，并在此处按页面补充相对链接；当前阶段不自动生成或提交真实数据截图，避免泄露 Vault 内容和本机状态。
+
 ## 1. 项目介绍
 
 这是一个基于 FastAPI 的企业文档 RAG 知识库问答系统 MVP，支持上传 PDF、DOCX、TXT、CSV 文档，解析后切分为 chunk，使用本地 BAAI/bge-m3 生成 embedding，写入 Qdrant 向量库，并通过 DeepSeek API 基于检索结果生成带引用来源的答案。
@@ -121,6 +151,10 @@ DELETE /learning-status/{status_id}
 | `QDRANT_COLLECTION` | Qdrant collection 名称 | `rag_chunks` |
 | `EMBEDDING_MODEL_NAME` | Embedding 模型 | `BAAI/bge-m3` |
 | `EMBEDDING_DEVICE` | 推理设备 | `cpu` |
+| `RERANKER_DEVICE` | Reranker 设备；`auto` 在可用时选 CUDA，失败回退 CPU | `auto` |
+| `RERANKER_BATCH_SIZE` | Reranker 批大小 | `8` |
+| `MODEL_PREWARM_ENABLED` | 是否允许安全模型预热 | `true` |
+| `MODEL_PREWARM_ON_STARTUP` | 是否在应用启动时自动预热 | `false` |
 | `DEEPSEEK_API_KEY` | DeepSeek API Key | 必填 |
 | `DEEPSEEK_BASE_URL` | DeepSeek OpenAI 兼容地址 | `https://api.deepseek.com` |
 | `DEEPSEEK_MODEL` | DeepSeek 模型 | `deepseek-v4-flash` |

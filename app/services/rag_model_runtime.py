@@ -7,8 +7,16 @@ from typing import Any
 
 from app.core.config import Settings, get_settings
 from app.observability import get_observability
-from app.services.embedding_service import get_embedding_service
-from app.services.rerank_service import get_rerank_service
+from app.services.embedding_service import (
+    embedding_runtime_status,
+    get_embedding_service,
+    shutdown_embedding_service,
+)
+from app.services.rerank_service import (
+    get_rerank_service,
+    reranker_runtime_status,
+    shutdown_rerank_service,
+)
 
 logger = logging.getLogger(__name__)
 _lock = threading.Lock()
@@ -16,7 +24,7 @@ _status: dict[str, Any] = {
     "enabled": False,
     "attempted": False,
     "ready": False,
-    "status": "disabled",
+    "status": "not_loaded",
     "error_code": None,
     "embedding_initialization_ms": 0.0,
     "reranker_initialization_ms": 0.0,
@@ -32,16 +40,16 @@ def prewarm_rag_models(
     settings = settings or get_settings()
     enabled = bool(settings.rag_model_prewarm_enabled)
     if not enabled and not force:
-        return _set_status(enabled=False, status="disabled")
+        return _set_status(enabled=False, status="disabled", attempted=False)
     with _lock:
         if _status.get("ready"):
-            return dict(_status)
+            return rag_model_runtime_status()
         started = time.perf_counter()
         result = {
             "enabled": enabled or force,
             "attempted": True,
             "ready": False,
-            "status": "running",
+            "status": "loading",
             "error_code": None,
             "embedding_initialization_ms": 0.0,
             "reranker_initialization_ms": 0.0,
@@ -58,7 +66,8 @@ def prewarm_rag_models(
         ) as span:
             try:
                 embedding_started = time.perf_counter()
-                get_embedding_service().vector_size
+                embedding = get_embedding_service()
+                embedding.embed_query("safe model readiness probe")
                 result["embedding_initialization_ms"] = (
                     time.perf_counter() - embedding_started
                 ) * 1000
@@ -67,7 +76,10 @@ def prewarm_rag_models(
                 result["reranker_initialization_ms"] = (
                     time.perf_counter() - rerank_started
                 ) * 1000
-                result["ready"] = bool(rerank_ready)
+                result["ready"] = bool(
+                    rerank_ready
+                    and embedding_runtime_status()["status"] == "ready"
+                )
                 result["status"] = (
                     "ready" if rerank_ready else "degraded"
                 )
@@ -96,7 +108,27 @@ def prewarm_rag_models(
 
 
 def rag_model_runtime_status() -> dict[str, Any]:
-    return dict(_status)
+    return {
+        **dict(_status),
+        "embedding": embedding_runtime_status(),
+        "reranker": reranker_runtime_status(),
+    }
+
+
+def shutdown_rag_models() -> None:
+    with _lock:
+        shutdown_rerank_service()
+        shutdown_embedding_service()
+        _set_status(
+            enabled=False,
+            attempted=False,
+            ready=False,
+            status="not_loaded",
+            error_code=None,
+            embedding_initialization_ms=0.0,
+            reranker_initialization_ms=0.0,
+            total_ms=0.0,
+        )
 
 
 def _set_status(**values: Any) -> dict[str, Any]:

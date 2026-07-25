@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     rerank_enabled: bool = False
     rerank_model: str = "BAAI/bge-reranker-v2-m3"
     rerank_top_n: int = 5
+    reranker_device: str = "auto"
+    reranker_batch_size: int = Field(default=8, ge=1, le=64)
 
     rag_rewrite_enabled: bool = True
     rag_rewrite_score_threshold: float = 0.45
@@ -70,6 +72,8 @@ class Settings(BaseSettings):
     rag_retrieval_profile_version: str = "rag-baseline-v1"
     rag_model_prewarm_enabled: bool = False
     rag_model_prewarm_on_startup: bool = False
+    model_prewarm_enabled: bool | None = None
+    model_prewarm_on_startup: bool | None = None
     learning_session_review_max_qa: int = Field(default=20, ge=1, le=100)
 
     session_memory_enabled: bool = True
@@ -171,6 +175,14 @@ class Settings(BaseSettings):
     def empty_workspace_id_is_none(cls, value: object) -> object:
         return None if value is None or str(value).strip() == "" else value
 
+    @field_validator("reranker_device", mode="before")
+    @classmethod
+    def validate_reranker_device(cls, value: object) -> str:
+        normalized = str(value or "auto").strip().casefold()
+        if normalized not in {"auto", "cpu", "cuda"}:
+            raise ValueError("RERANKER_DEVICE must be auto, cpu, or cuda")
+        return normalized
+
     @model_validator(mode="after")
     def resolve_project_paths(self) -> "Settings":
         if not self.upload_dir.is_absolute():
@@ -183,6 +195,10 @@ class Settings(BaseSettings):
             self.rag_evaluation_report_dir = BASE_DIR / self.rag_evaluation_report_dir
         if self.embedding_model:
             self.embedding_model_name = self.embedding_model
+        if self.model_prewarm_enabled is not None:
+            self.rag_model_prewarm_enabled = self.model_prewarm_enabled
+        if self.model_prewarm_on_startup is not None:
+            self.rag_model_prewarm_on_startup = self.model_prewarm_on_startup
         return self
 
     @property

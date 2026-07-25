@@ -48,11 +48,13 @@ Evidence Gate 是确定性的，只读取检索结果与 Context 统计，不读
 可选预热配置：
 
 ```env
-RAG_MODEL_PREWARM_ENABLED=false
-RAG_MODEL_PREWARM_ON_STARTUP=false
+MODEL_PREWARM_ENABLED=true
+MODEL_PREWARM_ON_STARTUP=false
+RERANKER_DEVICE=auto
+RERANKER_BATCH_SIZE=8
 ```
 
-默认不预热。启用后只加载本地模型，不发送真实问题或笔记；失败为 fail-open，可从 `/health/rag` 或评估 API 查看状态。短时 Query Cache 未启用，因为只有在实验显示收益且能正确处理 Profile、Collection、Filter 与重建失效时才允许启用。
+默认不在启动时预热。显式预热只加载本地模型并运行无用户正文的最小向量/排序探针，不调用 DeepSeek，不读完整 Vault，不写 QA History 或 Qdrant；失败为 fail-open，可从 `/health/rag`、`/system/status` 或评估 API 查看状态。旧的 `RAG_MODEL_PREWARM_*` 环境变量继续兼容。短时 Query Cache 未启用，因为只有在实验显示收益且能正确处理 Profile、Collection、Filter 与重建失效时才允许启用。
 
 ## API 与操作
 
@@ -62,6 +64,8 @@ RAG_MODEL_PREWARM_ON_STARTUP=false
 - `GET /agent/rag-evaluation/performance/profile?experiment_id=...`
 - `POST /agent/rag-evaluation/performance/prewarm`
 - `GET /agent/rag-evaluation/performance/prewarm/status`
+- `POST /system/models/prewarm`
+- `GET /system/status`
 
 评估页只显示拆分数量、策略配置、安全指标、冷/热延迟、阶段耗时和门禁状态。它不显示完整问题、答案、Context、Note 路径，也不允许手填未校准阈值。
 
@@ -79,10 +83,25 @@ S0 的无答案类 No-answer Accuracy 为 0、False Answer Rate 为 1。有限 C
 
 最终 S2 Holdout 的 No-answer Accuracy、Answerability Accuracy 均为 1，False Answer Rate、False Refusal Rate 均为 0，Answer Rate 为 0.7273，不存在全部拒答。检索与引用质量相对同一 Holdout 基线的差值均为 0。模型调用均值从 1.0909 降到 0.8182；无答案 Case 在生成前拒答，不调用答案模型。
 
-最终创建但未激活的候选是 `rag-safe-v1`，配置为 Evidence Gate + Safety Prompt，`post_citation_gate_enabled=false`。生产 Active Profile 仍是 `rag-baseline-v1`，等待人工测试和显式激活。
+最终安全 Profile 是 `rag-safe-v1`，配置为 Evidence Gate + Safety Prompt，`post_citation_gate_enabled=false`；阶段 8 已经人工验收并激活。阶段 9 进一步让所有 `answer_with_uncertainty` 回答都执行当前 Context 多来源引用门，即使通用 Post Citation Gate 未开启也不例外；失败时输出不伪造来源的安全不确定说明。
 
 单轮实测的主要性能瓶颈是 CPU CrossEncoder Rerank：S0 平均约 52.35 秒，答案模型约 6.57 秒，Query Embedding 约 0.41 秒，Qdrant 原始查询约 0.18 秒。最终 Holdout 的 Full RAG p50/p95 为约 15.52/35.26 秒；同一门禁计算中的 warm p95 从基线约 128.79 秒降到候选约 35.22 秒。实现了 Embedding、Reranker、Qdrant Client 和编译 Workflow 的进程内复用，以及可选 fail-open 本地模型预热；未启用证据不足的 Query Cache，也未为追求速度缩小候选集。
 
 按用户要求，为缩短收尾时间，额外的三轮全量复验在基线完成 62 个 Case Run 时终止，实验状态为 `cancelled`。阶段门禁采用已完成的 S0、32-Case Calibration、11-Case 独立 Holdout、自动化测试和数据稳定性核对结果。
 
 稳定性核对前后完全一致：Vault 81 个 Markdown、聚合 Hash `fcefb363cbe870b7544244d61d60add94db94361d1eff45f5c6365c2b3a41bae`；数据库 81 条笔记、24 条 QA History、3 个 Learning Session；生产 `rag_chunks` 仍为 3696 个 Point。
+
+## 阶段 9 设备实测
+
+阶段 9 使用 `obsidian-real-v2` 中 4 个可回答 Case 和 1 个无答案 Case，只执行一次 Embedding/Qdrant 召回，并把每个 Case 相同的 20 个候选分别交给 CPU 与 CUDA Reranker；模型、batch 8 和最终 Top-5 均相同，不调用 DeepSeek，不写业务数据。
+
+- Embedding 冷初始化约 16.50 秒，Query Embedding 均值约 405 毫秒，Qdrant 均值约 130 毫秒；
+- CPU 初始化约 3.32 秒，三轮热 Rerank 均值约 12.253 秒/Case；
+- CUDA 初始化约 5.63 秒，三轮热 Rerank 均值约 395 毫秒/Case；
+- CUDA 热耗时降低 96.78%，峰值显存约 2.33 GB，无 OOM；
+- 5/5 Case 的 Top-5 排序完全一致；
+- batch 8 因而保留，不盲目增大；模型与 `rag-safe-v1` 质量参数不变。
+
+硬件和 CUDA 构建满足条件时，`RERANKER_DEVICE=auto` 选择 CUDA；加载或评分失败会自动重载 CPU。当前项目 `.venv` 若安装的是 CPU-only Torch，`auto` 会安全选择 CPU，不会因检测到物理显卡而错误启用 CUDA。完整操作见 `docs/LOCAL_OPERATIONS.md`。
+
+标准 `.venv`（CPU 回退）还执行了 3 个可回答问题和 1 个无答案问题的最小 Full RAG 验证。首个冷 Case 总耗时约 37.33 秒，其中 Embedding 初始化约 15.75 秒、Reranker 初始化约 1.93 秒、Query Embedding 约 0.44 秒、Qdrant 约 0.08 秒、热外 Rerank 约 10.58 秒、DeepSeek 约 7.34 秒。预热后的三轮共 12 次运行平均总耗时约 15.06 秒，Query Embedding/Qdrant/Rerank/DeepSeek 均值分别约 0.19/0.07/9.32/5.47 秒。无答案 Case 三轮均在 LLM 前 `abstain`；测试使用 `evaluation_mode` 且关闭 LangSmith 外发，QA 数和 Qdrant points 前后不变。
