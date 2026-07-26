@@ -262,11 +262,14 @@ node --check app/static/rag_evaluation.js
 | 8 | 激活 `rag-safe-v1`、来源提醒、首页与统一交互体验 |
 | 9 | 性能硬化、CUDA→CPU 回退、模型复用、诊断与 Windows 一键运行 |
 
+更完整的阶段目标、验证方式和关键取舍见 [开发历程](docs/DEVELOPMENT_HISTORY.md)。
+
 ## 文档导航
 
 | 文档 | 内容 |
 | --- | --- |
 | [项目架构与面试材料](docs/PROJECT_OVERVIEW_AND_INTERVIEW.md) | 核心架构、技术难点、工程取舍与项目介绍 |
+| [开发历程](docs/DEVELOPMENT_HISTORY.md) | 阶段 1–9 的分支、成果、验证和演进逻辑 |
 | [本地运行与运维](docs/LOCAL_OPERATIONS.md) | 配置、启停、预热、诊断、清理、备份与恢复 |
 | [RAG 安全与性能](docs/RAG_SAFETY_AND_PERFORMANCE.md) | Evidence Gate、引用门、性能指标与设备实测 |
 | [RAG 评估](docs/RAG_EVALUATION.md) | 数据集、指标、实验运行与晋级门禁 |
