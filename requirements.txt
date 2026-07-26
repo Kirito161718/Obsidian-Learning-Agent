@@ -11,7 +11,7 @@ qdrant-client==1.12.1
 openai==1.59.6
 sentence-transformers==3.3.1
 numpy==2.2.1
-docling==2.15.1
+docling==2.94.0
 pytest==8.3.4
 httpx==0.28.1
 langgraph==1.2.9
