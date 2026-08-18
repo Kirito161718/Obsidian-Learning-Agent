@@ -1,6 +1,6 @@
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
-python-multipart==0.0.20
+python-multipart==0.0.31
 SQLAlchemy==2.0.36
 alembic==1.14.0
 pymysql[rsa]==1.1.1
